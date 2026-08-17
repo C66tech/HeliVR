@@ -2,89 +2,75 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>WebXR Right Controller Diagnostics</title>
+    <title>Quest 3 Right Controller Test</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        AFRAME.register-component('controller-debug', {
+        AFRAME.register-component('quest-diagnostics', {
             init: function () {
                 this.debugText = document.querySelector('#debug-text');
+                this.rightHand = document.querySelector('#right-hand');
+
+                this.triggerState = "Rilasciato (0.0)";
+                this.stickState = "X: 0.0, Y: 0.0";
+                this.isConnected = "No";
+
+                if (this.rightHand) {
+                    // Eventi di connessione del controller
+                    this.rightHand.addEventListener('connected', (evt) => {
+                        this.isConnected = "Sì (" + (evt.detail.name || "Meta Quest Touch") + ")";
+                    });
+                    this.rightHand.addEventListener('disconnected', () => {
+                        this.isConnected = "Disconnesso";
+                    });
+
+                    // Eventi del grilletto destro
+                    this.rightHand.addEventListener('triggerdown', () => {
+                        this.triggerState = "PREMUTO (1.0)";
+                    });
+                    this.rightHand.addEventListener('triggerup', () => {
+                        this.triggerState = "Rilasciato (0.0)";
+                    });
+
+                    // Eventi della levetta analogica (Thumbstick)
+                    this.rightHand.addEventListener('thumbstickmoved', (evt) => {
+                        let x = evt.detail.x.toFixed(2);
+                        let y = evt.detail.y.toFixed(2);
+                        this.stickState = `X: ${x}, Y: ${y}`;
+                    });
+                }
             },
             tick: function () {
-                let sceneEl = this.el.sceneEl;
-                let xrSession = sceneEl.renderer ? sceneEl.renderer.xr.getSession() : null;
-
-                let output = "=== DIAGNOSTICA CONTROLLER DESTRO ===\n\n";
-                output += "Sessione XR: " + (xrSession ? "ATTIVA (Immersive)" : "DISATTIVA (Desktop)") + "\n";
-
-                let rightFound = false;
-
-                // 1. Controllo tramite inputSources WebXR
-                if (xrSession && xrSession.inputSources) {
-                    for (let source of xrSession.inputSources) {
-                        // Cerchiamo esplicitamente la mano destra
-                        if (source.handedness === 'right' && source.gamepad) {
-                            rightFound = true;
-                            let gp = source.gamepad;
-                            let trig = gp.buttons[0] ? gp.buttons[0].value.toFixed(2) : "N/D";
-                            let stickX = gp.axes.length > 2 ? gp.axes[2].toFixed(2) : (gp.axes.length > 0 ? gp.axes[0].toFixed(2) : "N/D");
-                            let stickY = gp.axes.length > 3 ? gp.axes[3].toFixed(2) : (gp.axes.length > 1 ? gp.axes[1].toFixed(2) : "N/D");
-
-                            output += "[WebXR Source Trovata!]\n";
-                            output += "ID: " + (gp.id || "Sconosciuto") + "\n";
-                            output += "Grilletto (Trigger): " + trig + "\n";
-                            output += "Stick X: " + stickX + " | Stick Y: " + stickY + "\n";
-                            break;
-                        }
-                    }
-                }
-
-                // 2. Fallback su Gamepad API standard se XR non ha ancora mappato le mani
-                if (!rightFound) {
-                    let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-                    for (let i = 0; i < gamepads.length; i++) {
-                        let gp = gamepads[i];
-                        if (gp && gp.connected) {
-                            let idStr = (gp.id || "").toLowerCase();
-                            // Filtriamo o cerchiamo indizi del controller destro / Oculus / Meta
-                            if (idStr.includes('right') || idStr.includes('oculus') || idStr.includes('meta') || i === 0) {
-                                let trig = gp.buttons[0] ? gp.buttons[0].value.toFixed(2) : "N/D";
-                                let stickX = gp.axes.length > 2 ? gp.axes[2].toFixed(2) : (gp.axes.length > 0 ? gp.axes[0].toFixed(2) : "N/D");
-
-                                output += "[Gamepad API Fallback]\n";
-                                output += "Index [" + i + "] ID: " + gp.id.substring(0, 20) + "\n";
-                                output += "Grilletto: " + trig + " | StickX: " + stickX + "\n";
-                                rightFound = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (!rightFound) {
-                    output += "\nNessun controller destro rilevato.\nAssicurati di premere il tasto 'VR'\nin basso a destra e di indossare il visore.";
-                }
-
                 if (this.debugText) {
-                    this.debugText.setAttribute('value', output);
+                    let text = "=== CONTROLLER DESTRO QUEST 3 ===\n\n" +
+                               "Connesso: " + this.isConnected + "\n" +
+                               "Grilletto (Trigger): " + this.triggerState + "\n" +
+                               "Levetta (Thumbstick): " + this.stickState + "\n\n" +
+                               "(Indossa il visore, entra in VR\ne premi il grilletto o muovi la levetta)";
+                    
+                    this.debugText.setAttribute('value', text);
                 }
             }
         });
     </script>
 </head>
 <body>
-    <a-scene xr-mode-ui="enabled: true" controller-debug>
+    <a-scene xr-mode-ui="enabled: true" quest-diagnostics>
         <a-light type="ambient" color="#FFF" intensity="1"></a-light>
 
-        <!-- Sfondo grigio neutro per orientarsi -->
-        <a-plane position="0 0 -5" width="20" height="20" color="#222"></a-plane>
+        <!-- Sfondo di riferimento -->
+        <a-plane position="0 0 -5" width="20" height="20" color="#1a1a1a"></a-plane>
 
-        <!-- Pannello HUD fluttuante gigante davanti agli occhi -->
+        <!-- Pannello HUD fluttuante davanti agli occhi -->
         <a-entity position="0 1.6 -1.8">
-            <a-plane width="2.4" height="1.4" color="#000000" opacity="0.9" material="shader: flat"></a-plane>
-            <a-text id="debug-text" value="In attesa di connessione WebXR..." position="0 0 0.01" align="center" color="#00FF66" width="3.2" font="monoid"></a-text>
+            <a-plane width="2.6" height="1.4" color="#000000" opacity="0.9" material="shader: flat"></a-plane>
+            <a-text id="debug-text" value="In attesa di ingresso in VR..." position="0 0 0.01" align="center" color="#00FF66" width="3.2" font="monoid"></a-text>
         </a-entity>
 
-        <a-camera></a-camera>
+        <!-- Camera e Rig VR con supporto esclusivo al controller destro -->
+        <a-entity id="rig" position="0 0 0">
+            <a-camera position="0 1.6 0"></a-camera>
+            <a-entity id="right-hand" oculus-touch-controls="hand: right"></a-entity>
+        </a-entity>
     </a-scene>
 </body>
 </html>

@@ -2,13 +2,13 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Terreno JPG</title>
+    <title>VR Vertibird Simulator - Stretched Texture & Raised Skids</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
                 this.angle = 0;        
-                this.heliY = 0.25;     
+                this.heliY = 0.31;     // Altezza di riposo alzata per evitare che i pattini affondino
                 this.radius = 4.5;     
                 
                 this.currentThrottle = 0;
@@ -178,9 +178,9 @@
                     effectiveThrottle = (this.currentThrottle - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                let targetHeliY = 0.25 + (effectiveThrottle * 2.5) + heightNoise;
+                let targetHeliY = 0.31 + (effectiveThrottle * 2.5) + heightNoise;
                 this.heliY += (targetHeliY - this.heliY) * dt * 4.0;
-                if (this.heliY < 0.25) this.heliY = 0.25;
+                if (this.heliY < 0.31) this.heliY = 0.31;
 
                 let hingeAngleRad = Math.asin((this.heliY - 1.1) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
@@ -198,7 +198,7 @@
                 }
 
                 // --- 7. MOTO CIRCOLARE ---
-                if (this.heliY > 0.255) {
+                if (this.heliY > 0.315) {
                     let angularSpeed = -speedFactor * this.currentThrottle * 90.0; 
                     this.angle += angularSpeed * dt;
                 }
@@ -266,8 +266,8 @@
         <!-- CONTENITORE GLOBALE DEL DIORAMA -->
         <a-entity id="world-root" position="0 -0.3 -1.2" rotation="0 0 0" scale="1 1 1">
             
-            <!-- Base con texture JPG terreno.jpg -->
-            <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="src: url(terreno.jpg); repeat: 10 10; roughness: 0.8"></a-box>
+            <!-- Base con texture JPG stretchata (senza repeat) -->
+            <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="src: url(terreno.jpg); roughness: 0.8"></a-box>
             
             <!-- Perno Centrale a Cono -->
             <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>

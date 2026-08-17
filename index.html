@@ -2,14 +2,22 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Rails & Sound</title>
+    <title>VR Vertibird Simulator - Inertia & Smooth Audio</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.angle = 0;        // Angolo di rotazione sul cerchio
-                this.heliY = 0.25;     // Altezza fisica (0.25 = pattini a terra)
+                this.angle = 0;        // Angolo sul cerchio
+                this.heliY = 0.25;     // Altezza fisica (a terra)
                 this.radius = 3.0;     // Raggio dei binari
+                
+                // Variabili di inerzia (smoothing)
+                this.currentThrottle = 0;
+                this.currentStickY = 0;
+
+                // Angoli di rotazione manuale delle pale (evita blocchi o scatti)
+                this.rotorAngle = 0;
+                this.tailRotorAngle = 0;
                 
                 this.heliWrapperEl = document.querySelector('#heli-wrapper');
                 this.heliPitchEl = document.querySelector('#heli-pitch');
@@ -17,24 +25,29 @@
                 this.tailRotorEl = document.querySelector('#tail-rotor');
                 this.debugText = document.querySelector('#debug-text');
 
-                // --- SISTEMA AUDIO (Ronzio motore proporzionale al gas) ---
+                // --- SISTEMA AUDIO (Ronzio motore con Web Audio API) ---
                 this.audioCtx = null;
                 this.oscillator = null;
                 this.gainNode = null;
                 this.audioInitialized = false;
 
-                const initAudio = () => {
-                    if (this.audioInitialized) return;
+                this.initAudio = () => {
+                    if (this.audioInitialized) {
+                        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                            this.audioCtx.resume();
+                        }
+                        return;
+                    }
                     try {
                         window.AudioContext = window.AudioContext || window.webkitAudioContext;
                         this.audioCtx = new AudioContext();
                         
                         this.oscillator = this.audioCtx.createOscillator();
-                        this.oscillator.type = 'sawtooth'; // Tono ronzante metallico da motore
-                        this.oscillator.frequency.setValueAtTime(50, this.audioCtx.currentTime);
+                        this.oscillator.type = 'sawtooth'; // Tono metallico da motore
+                        this.oscillator.frequency.setValueAtTime(40, this.audioCtx.currentTime);
 
                         this.gainNode = this.audioCtx.createGain();
-                        this.gainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime); // Silenzio iniziale
+                        this.gainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
 
                         this.oscillator.connect(this.gainNode);
                         this.gainNode.connect(this.audioCtx.destination);
@@ -44,9 +57,8 @@
                     } catch (e) {}
                 };
 
-                window.addEventListener('click', initAudio);
-                window.addEventListener('touchstart', initAudio);
-                this.initAudioFn = initAudio;
+                window.addEventListener('click', this.initAudio);
+                window.addEventListener('touchstart', this.initAudio);
             },
             tick: function (time, delta) {
                 let dt = delta / 1000;
@@ -71,75 +83,78 @@
                     for (let gp of gamepads) {
                         if (gp && gp.connected && (gp.hand === 'right' || (gp.id && gp.id.toLowerCase().includes('right')))) {
                             trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
-                            stickY = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
+                            stickY = gp.axes.length >= 4 ? gp.axes.length >= 4 ? gp.axes[3] : 0 : (gp.axes.length >= 2 ? gp.axes[1] : 0);
                             controllerActive = true;
                             break;
                         }
                     }
                 }
 
-                if (trigger > 0.05) this.initAudioFn();
+                // Attiva l'audio non appena premi il grilletto o tocchi il controller
+                if (trigger > 0.02) {
+                    this.initAudio();
+                }
 
                 // Deadzone per levetta e grilletto
                 if (Math.abs(stickY) < 0.15) stickY = 0;
                 if (trigger < 0.02) trigger = 0;
 
+                // --- 2. INERZIA E SMOOTHING (Reattività graduale) ---
+                // Il gas e la levetta si muovono dolcemente verso il valore desiderato
+                this.currentThrottle += (trigger - this.currentThrottle) * dt * 4.0;
+                this.currentStickY += (stickY - this.currentStickY) * dt * 5.0;
+
                 if (this.debugText) {
                     this.debugText.setAttribute('value', controllerActive ? 
-                        `Gas: ${(trigger*100).toFixed(0)}%\nStick: ${stickY.toFixed(2)}` : 
+                        `Gas: ${(this.currentThrottle*100).toFixed(0)}%\nStick: ${this.currentStickY.toFixed(2)}` : 
                         "Sveglia Controller");
                 }
 
-                // --- 2. FISICA DELL'ALTEZZA ---
-                let targetHeliY = 0.25 + (trigger * 2.75);
-                this.heliY += (targetHeliY - this.heliY) * dt * 4.0;
+                // --- 3. FISICA DELL'ALTEZZA ---
+                let targetHeliY = 0.25 + (this.currentThrottle * 2.75);
+                this.heliY += (targetHeliY - this.heliY) * dt * 3.5;
                 if (this.heliY < 0.25) this.heliY = 0.25;
 
                 // Inclinazione dell'asta (Cerniera Z)
                 let hingeAngleRad = Math.asin((this.heliY - 0.75) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
 
-                // --- 3. BINARI CIRCOLARI (Senso Antiorario) ---
-                // stickY negativo = spinto in avanti -> avanza in senso antiorario
-                // stickY positivo = spinto indietro -> va in retromarcia (senso orario)
-                let speedFactor = -stickY; 
-                
-                // L'elicottero compie il giro sui binari se si muove la levetta
+                // --- 4. BINARI CIRCOLARI (Senso Antiorario) ---
+                let speedFactor = -this.currentStickY; 
                 this.angle += speedFactor * 0.8 * dt;
 
                 // Applica rotazione globale all'asta
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // --- 4. ASSETTO E INCLINAZIONE DEL MUSO (Pitch) ---
+                // --- 5. ASSETTO E INCLINAZIONE DEL MUSO (Pitch con inerzia) ---
                 if (this.heliWrapperEl) {
                     this.heliWrapperEl.setAttribute('rotation', { x: 0, y: 0, z: -hingeAngleDeg });
                 }
 
                 if (this.heliPitchEl) {
-                    // Quando vai in avanti (speedFactor > 0) il muso si abbassa (pitch negativo)
-                    // Quando vai indietro (speedFactor < 0) il muso si alza (pitch positivo)
                     let pitchAngle = speedFactor * 18.0; 
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 5. DINAMICA DELLE PALE E DELL'AUDIO ---
-                if (this.rotorEl && this.tailRotorEl) {
-                    if (trigger > 0.01) {
-                        let speedDur = Math.max(15, 350 - (trigger * 330));
-                        this.rotorEl.setAttribute('animation', `property: rotation; to: 0 360 0; loop: true; dur: ${speedDur}; easing: linear`);
-                        this.tailRotorEl.setAttribute('animation', `property: rotation; to: 0 360 0; loop: true; dur: ${speedDur/1.5}; easing: linear`);
-                    } else {
-                        this.rotorEl.removeAttribute('animation');
-                        this.tailRotorEl.removeAttribute('animation');
-                        this.rotorEl.setAttribute('rotation', '0 0 0');
-                        this.tailRotorEl.setAttribute('rotation', '0 0 0');
+                // --- 6. ROTAZIONE MANUALE DELLE PALE (Fluida e senza blocchi) ---
+                if (this.currentThrottle > 0.01) {
+                    // Velocità di rotazione proporzionale al gas attuale
+                    let rotSpeed = this.currentThrottle * 2500; 
+                    this.rotorAngle += rotSpeed * dt;
+                    this.tailRotorAngle += (rotSpeed * 2.5) * dt;
+
+                    if (this.rotorEl) {
+                        this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
+                    }
+                    if (this.tailRotorEl) {
+                        this.tailRotorEl.setAttribute('rotation', `${this.tailRotorAngle % 360} 0 0`);
                     }
                 }
 
-                // Aggiornamento frequenza e volume del ronzio sonoro
+                // --- 7. AGGIORNAMENTO AUDIO (Ronzio proporzionale) ---
                 if (this.audioInitialized && this.oscillator && this.gainNode && this.audioCtx) {
-                    let targetFreq = 40 + (trigger * 180);
-                    let targetVolume = trigger > 0.01 ? 0.12 : 0.0;
+                    let targetFreq = 45 + (this.currentThrottle * 190);
+                    let targetVolume = this.currentThrottle > 0.01 ? 0.15 : 0.0;
                     this.oscillator.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.1);
                     this.gainNode.gain.setTargetAtTime(targetVolume, this.audioCtx.currentTime, 0.1);
                 }

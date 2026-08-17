@@ -2,10 +2,10 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Zoom & Controls</title>
+    <title>VR Vertibird Simulator - Scene Scaling & VR Button</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE: Gestione Input, Zoom con tasti A/B e Fisica del Vertibird
+        // COMPONENTE: Gestione Input, Scaling della scena e Fisica del Vertibird
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
                 this.angle = 0;        
@@ -18,9 +18,9 @@
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
 
-                // Gestione Zoom della Telecamera (distanza del rig)
-                this.rigEl = document.querySelector('#rig');
-                this.cameraDistance = 7.5;
+                // Gestione dello Scale della scena (World Scaling)
+                this.sceneEl = document.querySelector('a-scene');
+                this.currentScale = 1.0; // Scala normale (1:1)
                 
                 this.heliWrapperEl = document.querySelector('#heli-wrapper');
                 this.heliPitchEl = document.querySelector('#heli-pitch');
@@ -63,19 +63,23 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // --- ASCOLTO TASTI A e B (Eventi A-Frame Oculus Touch) ---
+                // --- FUNZIONE DI SCALING GLOBALE ---
+                const applyScale = (delta) => {
+                    this.currentScale = Math.min(2.5, Math.max(0.3, this.currentScale + delta));
+                    this.sceneEl.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
+                };
+
+                // --- ASCOLTO TASTI A e B (Scala Intera Scena) ---
                 let rightHand = document.querySelector('#right-hand');
                 
-                // Tasto A (pulsante aup / abuttondown): Zoom Out (Allontana la visuale)
+                // Tasto A: Rimpicciolisce la scena (fa sembrare il plastico più piccolo)
                 rightHand.addEventListener('abuttondown', () => {
-                    this.cameraDistance = Math.min(12.0, this.cameraDistance + 0.5);
-                    if (this.rigEl) this.rigEl.setAttribute('position', `0 0 ${this.cameraDistance}`);
+                    applyScale(-0.15);
                 });
 
-                // Tasto B (pulsante bbuttondown): Zoom In (Avvicina la visuale)
+                // Tasto B: Ingrandisce la scena (fa sembrare il plastico più grande / vicino)
                 rightHand.addEventListener('bbuttondown', () => {
-                    this.cameraDistance = Math.max(3.0, this.cameraDistance - 0.5);
-                    if (this.rigEl) this.rigEl.setAttribute('position', `0 0 ${this.cameraDistance}`);
+                    applyScale(0.15);
                 });
             },
             tick: function (time, delta) {
@@ -123,7 +127,7 @@
 
                 if (this.debugText) {
                     this.debugText.setAttribute('value', controllerActive ? 
-                        `Gas: ${(this.currentThrottle*100).toFixed(0)}%\nZoom: ${this.cameraDistance.toFixed(1)}m` : 
+                        `Gas: ${(this.currentThrottle*100).toFixed(0)}%\nScala: ${this.currentScale.toFixed(2)}x` : 
                         "Sveglia Controller");
                 }
 
@@ -195,8 +199,37 @@
             }
         });
     </script>
+    <style>
+        /* Pulsante VR HTML personalizzato in evidenza sullo schermo */
+        #vr-button-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+        .custom-vr-btn {
+            background-color: #2e7d32;
+            color: white;
+            border: 2px solid #4caf50;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: background 0.2s;
+        }
+        .custom-vr-btn:hover {
+            background-color: #388e3c;
+        }
+    </style>
 </head>
 <body>
+    <!-- Pulsante HTML per entrare in VR garantito -->
+    <div id="vr-button-container">
+        <button class="custom-vr-btn" onclick="document.querySelector('a-scene').enterVR()">ENTRA IN VR</button>
+    </div>
+
     <a-scene xr-mode-ui="enabled: true">
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
@@ -207,7 +240,7 @@
         <!-- Perno Centrale a Cono -->
         <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
 
-        <!-- VERTIBIRD (Colleghiamo qui il componente di volo principale) -->
+        <!-- VERTIBIRD -->
         <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
             
             <!-- Asta Meccanica -->
@@ -254,7 +287,7 @@
         <a-entity id="rig" position="0 0 7.5">
             <a-camera position="0 1.5 0"></a-camera>
             
-            <!-- Controller Destro con tasti A/B abilitati per lo Zoom -->
+            <!-- Controller Destro con tasti A/B abilitati per scalare l'intera scena -->
             <a-entity id="right-hand" oculus-touch-controls="hand: right">
                 <a-text id="debug-text" value="Pronto" position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#00FF66" align="center"></a-text>
             </a-entity>

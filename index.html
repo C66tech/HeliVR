@@ -2,9 +2,11 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird - WebXR Native InputSources</title>
+    <title>VR Vertibird Simulator - WebXR Native & Libraries</title>
+    <!-- Caricamento di A-Frame e delle librerie di supporto standard per WebXR -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
+        // Componente di volo basato su WebXR inputSources e Gamepad API nativa
         AFRAME.register-component('vertibird-flight', {
             init: function () {
                 this.angle = 0;
@@ -22,48 +24,47 @@
                 let sceneEl = this.el.sceneEl;
                 let xrSession = sceneEl.renderer ? sceneEl.renderer.xr.getSession() : null;
 
-                let infoString = "XR Session: " + (xrSession ? "ATTIVA" : "NON ATTIVA") + "\n";
+                let infoString = "XR: " + (xrSession ? "ATTIVA" : "STANDBY") + "\n";
                 let controllerFound = false;
 
-                // Approccio nativo WebXR tramite session.inputSources
+                // 1. Lettura nativa tramite WebXR inputSources (Standard Meta Quest / Browser XR)
                 if (xrSession && xrSession.inputSources) {
                     for (let source of xrSession.inputSources) {
-                        // Cerchiamo la mano destra (o il gamepad disponibile se handedness non è definito)
                         if (source.gamepad && (source.handedness === 'right' || !source.handedness)) {
                             let gp = source.gamepad;
                             controllerFound = true;
 
-                            // Grilletto (di solito il bottone 0)
+                            // Grilletto (Trigger - di solito bottone 0)
                             if (gp.buttons && gp.buttons.length > 0) {
                                 this.triggerValue = gp.buttons[0].value;
                             }
-                            // Levetta X (di solito l'asse 2 o 0)
+                            // Levetta analogica X (Thumbstick - di solito asse 2 o 0)
                             if (gp.axes && gp.axes.length > 2) {
                                 this.stickX = gp.axes[2];
                             } else if (gp.axes && gp.axes.length > 0) {
                                 this.stickX = gp.axes[0];
                             }
 
-                            infoString += `Hand: ${source.handedness}\nTRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
+                            infoString += `Hand: ${source.handedness || 'auto'}\nTRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
                             break;
                         }
                     }
                 }
 
+                // 2. Fallback sulla Gamepad API standard se la sessione XR non è ancora in mod immersive
                 if (!controllerFound) {
-                    // Fallback sulla Gamepad API standard se la sessione XR non ha ancora esposto le sources
                     let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
                     for (let gp of gamepads) {
                         if (gp && gp.buttons && gp.buttons.length > 0) {
                             this.triggerValue = gp.buttons[0].value;
                             if (gp.axes && gp.axes.length > 2) this.stickX = gp.axes[2];
-                            infoString += `Fallback GP: ${gp.id.substring(0, 10)}\nTRIG: ${this.triggerValue.toFixed(2)}`;
+                            infoString += `GP Fallback\nTRIG: ${this.triggerValue.toFixed(2)}`;
                             controllerFound = true;
                             break;
                         }
                     }
                     if (!controllerFound) {
-                        infoString += "Entra in VR (premi tasto VR)";
+                        infoString += "Indossa il Quest 3 e avvia VR";
                         this.triggerValue = 0;
                         this.stickX = 0;
                     }
@@ -73,24 +74,25 @@
                     this.debugText.setAttribute('value', infoString);
                 }
 
-                // 1. Movimento in altezza proporzionale al grilletto
+                // --- DINAMICA DI VOLO ---
+                // Altezza proporzionale alla pressione del grilletto
                 let targetHeight = 0.6 + (this.triggerValue * 2.5);
                 this.height += (targetHeight - this.height) * dt * 3.0;
 
-                // 2. Rotazione attorno al perno controllata dalla levetta o fissa
+                // Rotazione attorno al perno controllata dalla levetta
                 let moveSpeed = 0.8 + (this.stickX * 2.0);
                 this.angle += moveSpeed * dt;
                 let x = Math.cos(this.angle) * this.radius;
                 let z = Math.sin(this.angle) * this.radius;
                 this.el.setAttribute('position', { x: x, y: this.height, z: z });
 
-                // Inclinazione del muso
+                // Inclinazione del muso (tilt) in base alla pressione del grilletto
                 let rotationY = -this.angle * (180 / Math.PI) + 180;
                 if (this.modelEl) {
                     this.modelEl.setAttribute('rotation', { x: this.triggerValue * -12, y: rotationY, z: 0 });
                 }
 
-                // 3. Controllo elica (ferma se grilletto a 0, gira se premuto)
+                // Controllo elica: ferma se grilletto a 0, velocità proporzionale se premuto
                 if (this.rotorEl) {
                     if (this.triggerValue > 0.05) {
                         let speedDuration = Math.max(20, 300 - (this.triggerValue * 280));
@@ -106,31 +108,43 @@
 </head>
 <body>
     <a-scene xr-mode-ui="enabled: true">
+        <!-- Illuminazione ambientale e direzionale -->
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
+        <!-- Pavimentazione / Tavola di gioco -->
         <a-box position="0 -0.5 0" width="10" height="1" depth="10" material="color: #2b2b2b"></a-box>
+        
+        <!-- Perno centrale -->
         <a-cylinder position="0 0 0" radius="0.2" height="1.5" color="#FFCC00"></a-cylinder>
 
-        <!-- Pannello HUD di diagnostica 3D -->
+        <!-- Pannello HUD di diagnostica visibile nel visore -->
         <a-entity position="0 1.8 -2">
             <a-plane width="2.5" height="1.2" color="#000000" opacity="0.85"></a-plane>
-            <a-text id="status-text" value="Avvio..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
+            <a-text id="status-text" value="Inizializzazione..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
         </a-entity>
 
-        <!-- Elicottero -->
+        <!-- Elicottero Verde Militare con asta collegata al perno -->
         <a-entity id="vertibird" vertibird-flight>
             <a-entity position="0 0.75 0">
+                <!-- Braccio meccanico sottile e allungato -->
                 <a-box position="-1.5 0 0" width="3.0" height="0.03" depth="0.03" color="#FFCC00"></a-box>
                 
+                <!-- Modello dell'elicottero -->
                 <a-entity id="heli-model" position="-3.0 0 0" rotation="0 90 0">
+                    <!-- Cabina verde -->
                     <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #388E3C; roughness: 0.3"></a-box>
+                    <!-- Cabina di pilotaggio vetrata -->
                     <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65; roughness: 0.1"></a-sphere>
+                    <!-- Trave di coda -->
                     <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #2E7D32"></a-cylinder>
+                    <!-- Stabilizzatori -->
                     <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #388E3C" rotation="0 0 -15"></a-box>
+                    <!-- Pattini -->
                     <a-box position="-0.05 -0.37 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
                     <a-box position="-0.05 -0.37 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
 
+                    <!-- Rotore principale (fermo di default) -->
                     <a-entity position="0 0.24 0">
                         <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
                         <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
@@ -141,6 +155,7 @@
             </a-entity>
         </a-entity>
 
+        <!-- Camera e rig VR -->
         <a-entity id="rig" position="0 1.6 3">
             <a-camera></a-camera>
         </a-entity>

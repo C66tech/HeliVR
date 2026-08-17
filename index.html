@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - AR Passthrough & Real Scale</title>
+    <title>VR Vertibird Simulator - AR Passthrough Fixed</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -260,20 +260,19 @@
     </style>
 </head>
 <body>
-    <!-- Pulsante HTML per avviare la sessione Immersive AR (Passthrough) -->
+    <!-- Pulsante HTML aggiornato con enterAR() per attivare il Passthrough -->
     <div id="ar-button-container">
         <button class="custom-ar-btn" onclick="document.querySelector('a-scene').enterAR()">ENTRA IN AR (PASSTHROUGH)</button>
     </div>
 
-    <!-- A-Scene configurata per accettare la modalità AR -->
-    <a-scene embedded xr-mode-ui="enabled: true">
+    <a-scene xr-mode-ui="enabled: true">
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- CONTENITORE GLOBALE DEL DIORAMA (Scalabile e Trascinabile) -->
+        <!-- CONTENITORE GLOBALE DEL DIORAMA -->
         <a-entity id="world-root" position="0 0 0" scale="1 1 1">
             
-            <!-- Pavimentazione di supporto (visibile in VR, trasparente o utile come base in AR) -->
+            <!-- Pavimentazione -->
             <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="color: #2b2b2b; opacity: 0.9"></a-box>
             
             <!-- Perno Centrale a Cono -->
@@ -328,7 +327,6 @@
         <a-entity id="rig" position="0 0 7.5">
             <a-camera position="0 1.5 0"></a-camera>
             
-            <!-- Controller Destro con tasti A/B (Zoom/Scale) e Grip (Spostamento Diorama) -->
             <a-entity id="right-hand" oculus-touch-controls="hand: right">
                 <a-text id="debug-text" value="Pronto" position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#00FF66" align="center"></a-text>
             </a-entity>

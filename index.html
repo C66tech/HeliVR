@@ -2,11 +2,9 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - WebXR Native & Libraries</title>
-    <!-- Caricamento di A-Frame e delle librerie di supporto standard per WebXR -->
+    <title>VR Vertibird - WebXR + XInput Gamepad Support</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // Componente di volo basato su WebXR inputSources e Gamepad API nativa
         AFRAME.register-component('vertibird-flight', {
             init: function () {
                 this.angle = 0;
@@ -24,50 +22,65 @@
                 let sceneEl = this.el.sceneEl;
                 let xrSession = sceneEl.renderer ? sceneEl.renderer.xr.getSession() : null;
 
-                let infoString = "XR: " + (xrSession ? "ATTIVA" : "STANDBY") + "\n";
-                let controllerFound = false;
+                let infoString = "Modo: " + (xrSession ? "VR Immersive" : "Desktop / 2D") + "\n";
+                let inputDetected = false;
 
-                // 1. Lettura nativa tramite WebXR inputSources (Standard Meta Quest / Browser XR)
+                // 1. Lettura da Controller WebXR (Meta Quest 3 in VR)
                 if (xrSession && xrSession.inputSources) {
                     for (let source of xrSession.inputSources) {
                         if (source.gamepad && (source.handedness === 'right' || !source.handedness)) {
                             let gp = source.gamepad;
-                            controllerFound = true;
-
-                            // Grilletto (Trigger - di solito bottone 0)
                             if (gp.buttons && gp.buttons.length > 0) {
                                 this.triggerValue = gp.buttons[0].value;
                             }
-                            // Levetta analogica X (Thumbstick - di solito asse 2 o 0)
                             if (gp.axes && gp.axes.length > 2) {
                                 this.stickX = gp.axes[2];
                             } else if (gp.axes && gp.axes.length > 0) {
                                 this.stickX = gp.axes[0];
                             }
-
-                            infoString += `Hand: ${source.handedness || 'auto'}\nTRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
+                            infoString += `XR Controller\nTRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
+                            inputDetected = true;
                             break;
                         }
                     }
                 }
 
-                // 2. Fallback sulla Gamepad API standard se la sessione XR non è ancora in mod immersive
-                if (!controllerFound) {
+                // 2. Lettura da Controller XInput (es. Gamepad Xbox / Standard PC collegato via USB o Bluetooth)
+                if (!inputDetected) {
                     let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-                    for (let gp of gamepads) {
-                        if (gp && gp.buttons && gp.buttons.length > 0) {
-                            this.triggerValue = gp.buttons[0].value;
-                            if (gp.axes && gp.axes.length > 2) this.stickX = gp.axes[2];
-                            infoString += `GP Fallback\nTRIG: ${this.triggerValue.toFixed(2)}`;
-                            controllerFound = true;
-                            break;
+                    for (let i = 0; i < gamepads.length; i++) {
+                        let gp = gamepads[i];
+                        // Rileva gamepad standard o XInput collegati al PC/Visore
+                        if (gp && gp.connected) {
+                            // Su XInput standard (es. Xbox Controller):
+                            // - Tasto RT (grilletto destro) spesso corrisponde al bottone 7 o 2/3, oppure asse 5. Usiamo il bottone 7 o il grilletto analogico se disponibile.
+                            // - Levetta sinistra/destra asse 0 (Stick sinistro X) o asse 2 (Stick destro X).
+                            
+                            let trigVal = 0;
+                            // Se il gamepad ha pulsanti analogici avanzati (es. grilletti Xbox)
+                            if (gp.buttons.length > 7 && typeof gp.buttons[7].value === 'number') {
+                                trigVal = gp.buttons[7].value; // RT su Xbox
+                            } else if (gp.buttons[0]) {
+                                trigVal = gp.buttons[0].pressed ? 1.0 : 0.0;
+                            }
+
+                            let stickVal = gp.axes.length > 2 ? gp.axes[2] : (gp.axes.length > 0 ? gp.axes[0] : 0);
+
+                            if (trigVal > 0.05 || Math.abs(stickVal) > 0.05 || i === 0) {
+                                this.triggerValue = trigVal;
+                                this.stickX = stickVal;
+                                infoString += `XInput: ${gp.id.substring(0, 15)}\nRT/TRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
+                                inputDetected = true;
+                                break;
+                            }
                         }
                     }
-                    if (!controllerFound) {
-                        infoString += "Indossa il Quest 3 e avvia VR";
-                        this.triggerValue = 0;
-                        this.stickX = 0;
-                    }
+                }
+
+                if (!inputDetected) {
+                    infoString += "Nessun comando attivo.\nPremi grilletto o usa XInput.";
+                    this.triggerValue = 0;
+                    this.stickX = 0;
                 }
 
                 if (this.debugText) {
@@ -75,24 +88,20 @@
                 }
 
                 // --- DINAMICA DI VOLO ---
-                // Altezza proporzionale alla pressione del grilletto
                 let targetHeight = 0.6 + (this.triggerValue * 2.5);
                 this.height += (targetHeight - this.height) * dt * 3.0;
 
-                // Rotazione attorno al perno controllata dalla levetta
                 let moveSpeed = 0.8 + (this.stickX * 2.0);
                 this.angle += moveSpeed * dt;
                 let x = Math.cos(this.angle) * this.radius;
                 let z = Math.sin(this.angle) * this.radius;
                 this.el.setAttribute('position', { x: x, y: this.height, z: z });
 
-                // Inclinazione del muso (tilt) in base alla pressione del grilletto
                 let rotationY = -this.angle * (180 / Math.PI) + 180;
                 if (this.modelEl) {
                     this.modelEl.setAttribute('rotation', { x: this.triggerValue * -12, y: rotationY, z: 0 });
                 }
 
-                // Controllo elica: ferma se grilletto a 0, velocità proporzionale se premuto
                 if (this.rotorEl) {
                     if (this.triggerValue > 0.05) {
                         let speedDuration = Math.max(20, 300 - (this.triggerValue * 280));
@@ -108,43 +117,31 @@
 </head>
 <body>
     <a-scene xr-mode-ui="enabled: true">
-        <!-- Illuminazione ambientale e direzionale -->
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- Pavimentazione / Tavola di gioco -->
         <a-box position="0 -0.5 0" width="10" height="1" depth="10" material="color: #2b2b2b"></a-box>
-        
-        <!-- Perno centrale -->
         <a-cylinder position="0 0 0" radius="0.2" height="1.5" color="#FFCC00"></a-cylinder>
 
-        <!-- Pannello HUD di diagnostica visibile nel visore -->
+        <!-- Pannello HUD di diagnostica -->
         <a-entity position="0 1.8 -2">
-            <a-plane width="2.5" height="1.2" color="#000000" opacity="0.85"></a-plane>
-            <a-text id="status-text" value="Inizializzazione..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
+            <a-plane width="2.8" height="1.2" color="#000000" opacity="0.85"></a-plane>
+            <a-text id="status-text" value="In attesa di input..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
         </a-entity>
 
-        <!-- Elicottero Verde Militare con asta collegata al perno -->
+        <!-- Elicottero -->
         <a-entity id="vertibird" vertibird-flight>
             <a-entity position="0 0.75 0">
-                <!-- Braccio meccanico sottile e allungato -->
                 <a-box position="-1.5 0 0" width="3.0" height="0.03" depth="0.03" color="#FFCC00"></a-box>
                 
-                <!-- Modello dell'elicottero -->
                 <a-entity id="heli-model" position="-3.0 0 0" rotation="0 90 0">
-                    <!-- Cabina verde -->
                     <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #388E3C; roughness: 0.3"></a-box>
-                    <!-- Cabina di pilotaggio vetrata -->
                     <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65; roughness: 0.1"></a-sphere>
-                    <!-- Trave di coda -->
                     <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #2E7D32"></a-cylinder>
-                    <!-- Stabilizzatori -->
                     <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #388E3C" rotation="0 0 -15"></a-box>
-                    <!-- Pattini -->
                     <a-box position="-0.05 -0.37 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
                     <a-box position="-0.05 -0.37 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
 
-                    <!-- Rotore principale (fermo di default) -->
                     <a-entity position="0 0.24 0">
                         <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
                         <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
@@ -155,7 +152,6 @@
             </a-entity>
         </a-entity>
 
-        <!-- Camera e rig VR -->
         <a-entity id="rig" position="0 1.6 3">
             <a-camera></a-camera>
         </a-entity>

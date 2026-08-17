@@ -2,14 +2,14 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Realistic Turbulence</title>
+    <title>VR Vertibird Simulator - Fast & Realistic Flight</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
                 this.angle = 0;        
                 this.heliY = 0.25;     
-                this.radius = 4.5;     // Raggio largo
+                this.radius = 4.5;     
                 
                 // Variabili di inerzia
                 this.currentThrottle = 0;
@@ -62,7 +62,7 @@
             },
             tick: function (time, delta) {
                 let dt = delta / 1000;
-                let t = time / 1000; // Tempo in secondi per le fluttuazioni
+                let t = time / 1000; 
                 
                 let trigger = 0;
                 let stickY = 0;
@@ -109,22 +109,16 @@
                         "Sveglia Controller");
                 }
 
-                // --- 3. GENERAZIONE TURBOLENZE (Pseudo-casuali) ---
+                // --- 3. TURBOLENZE (Leggere fluttuazioni) ---
                 let heightNoise = 0;
                 let pitchNoise = 0;
                 
-                // Le fluttuazioni avvengono solo se il motore è acceso
                 if (this.currentThrottle > 0.05) {
-                    // Combinazione di onde sfalsate per creare un movimento "sporco" e imprevedibile
-                    heightNoise = (Math.sin(t * 2.3) * 0.03) + (Math.sin(t * 5.1) * 0.015);
-                    pitchNoise = (Math.sin(t * 1.8) * 1.2) + (Math.cos(t * 4.4) * 0.8);
-                    
-                    // Le turbolenze scalano con la potenza del motore
-                    heightNoise *= this.currentThrottle;
-                    pitchNoise *= this.currentThrottle;
+                    heightNoise = ((Math.sin(t * 2.3) * 0.03) + (Math.sin(t * 5.1) * 0.015)) * this.currentThrottle;
+                    pitchNoise = ((Math.sin(t * 1.8) * 1.2) + (Math.cos(t * 4.4) * 0.8)) * this.currentThrottle;
                 }
 
-                // --- 4. FISICA DELL'ALTEZZA (Soglia + Turbolenza) ---
+                // --- 4. FISICA DELL'ALTEZZA ---
                 let takeoffThreshold = 0.35; 
                 let effectiveThrottle = 0;
                 
@@ -132,7 +126,6 @@
                     effectiveThrottle = (this.currentThrottle - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                // Aggiungiamo la turbolenza (heightNoise) all'altezza bersaglio
                 let targetHeliY = 0.25 + (effectiveThrottle * 2.5) + heightNoise;
                 this.heliY += (targetHeliY - this.heliY) * dt * 4.0;
                 if (this.heliY < 0.25) this.heliY = 0.25;
@@ -140,10 +133,8 @@
                 let hingeAngleRad = Math.asin((this.heliY - 1.1) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
 
-                // --- 5. ASSETTO DEL MUSO (Pitch + Turbolenza) ---
+                // --- 5. ASSETTO DEL MUSO (Pitch) ---
                 let speedFactor = this.currentStickY; 
-                
-                // Aggiungiamo la turbolenza (pitchNoise) all'inclinazione
                 let pitchAngle = (speedFactor * 15.0) + pitchNoise; 
                 
                 if (this.heliWrapperEl) {
@@ -154,9 +145,10 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 6. MOTO CIRCOLARE ---
+                // --- 6. MOTO CIRCOLARE (Velocità ripristinata e reattiva) ---
                 if (this.heliY > 0.255) {
-                    let angularSpeed = -speedFactor * this.currentThrottle * 1.5; 
+                    // Moltiplicatore di velocità angolare adeguato al raggio di 4.5m
+                    let angularSpeed = -speedFactor * this.currentThrottle * 90.0; 
                     this.angle += angularSpeed * dt;
                 }
 

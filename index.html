@@ -2,161 +2,89 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird - Fixed Startup & Input</title>
+    <title>WebXR Right Controller Diagnostics</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        AFRAME.register-component('vertibird-flight', {
+        AFRAME.register-component('controller-debug', {
             init: function () {
-                this.angle = 0;
-                this.height = 1.0;
-                this.radius = 3.0;
-                this.triggerValue = 0;
-                this.stickX = 0;
-                
-                // Riferimenti diretti agli elementi interni
-                this.rotorEl = this.el.querySelector('#main-rotor');
-                this.modelEl = this.el.querySelector('#heli-model');
-                this.debugText = document.querySelector('#status-text');
-                
-                // Flag per verificare se l'interfaccia si è aggiornata
-                if (this.debugText) {
-                    this.debugText.setAttribute('value', 'Sistema Pronto.\nPremi Grilletto o XInput.');
-                }
+                this.debugText = document.querySelector('#debug-text');
             },
-            tick: function (time, delta) {
-                let dt = delta / 1000;
+            tick: function () {
                 let sceneEl = this.el.sceneEl;
                 let xrSession = sceneEl.renderer ? sceneEl.renderer.xr.getSession() : null;
 
-                let infoString = "Modo: " + (xrSession ? "VR Immersive" : "Desktop / 2D") + "\n";
-                let inputDetected = false;
+                let output = "=== DIAGNOSTICA CONTROLLER DESTRO ===\n\n";
+                output += "Sessione XR: " + (xrSession ? "ATTIVA (Immersive)" : "DISATTIVA (Desktop)") + "\n";
 
-                // 1. Lettura da Controller WebXR (Meta Quest 3)
+                let rightFound = false;
+
+                // 1. Controllo tramite inputSources WebXR
                 if (xrSession && xrSession.inputSources) {
                     for (let source of xrSession.inputSources) {
-                        if (source.gamepad && (source.handedness === 'right' || !source.handedness)) {
+                        // Cerchiamo esplicitamente la mano destra
+                        if (source.handedness === 'right' && source.gamepad) {
+                            rightFound = true;
                             let gp = source.gamepad;
-                            if (gp.buttons && gp.buttons.length > 0) {
-                                this.triggerValue = gp.buttons[0].value;
-                            }
-                            if (gp.axes && gp.axes.length > 2) {
-                                this.stickX = gp.axes[2];
-                            } else if (gp.axes && gp.axes.length > 0) {
-                                this.stickX = gp.axes[0];
-                            }
-                            infoString += `XR Controller\nTRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
-                            inputDetected = true;
+                            let trig = gp.buttons[0] ? gp.buttons[0].value.toFixed(2) : "N/D";
+                            let stickX = gp.axes.length > 2 ? gp.axes[2].toFixed(2) : (gp.axes.length > 0 ? gp.axes[0].toFixed(2) : "N/D");
+                            let stickY = gp.axes.length > 3 ? gp.axes[3].toFixed(2) : (gp.axes.length > 1 ? gp.axes[1].toFixed(2) : "N/D");
+
+                            output += "[WebXR Source Trovata!]\n";
+                            output += "ID: " + (gp.id || "Sconosciuto") + "\n";
+                            output += "Grilletto (Trigger): " + trig + "\n";
+                            output += "Stick X: " + stickX + " | Stick Y: " + stickY + "\n";
                             break;
                         }
                     }
                 }
 
-                // 2. Lettura da Controller XInput / Gamepad Standard (PC / Browser)
-                if (!inputDetected) {
+                // 2. Fallback su Gamepad API standard se XR non ha ancora mappato le mani
+                if (!rightFound) {
                     let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
                     for (let i = 0; i < gamepads.length; i++) {
                         let gp = gamepads[i];
                         if (gp && gp.connected) {
-                            let trigVal = 0;
-                            if (gp.buttons.length > 7 && typeof gp.buttons[7].value === 'number') {
-                                trigVal = gp.buttons[7].value; // RT su Xbox
-                            } else if (gp.buttons[0]) {
-                                trigVal = gp.buttons[0].pressed ? 1.0 : 0.0;
-                            }
+                            let idStr = (gp.id || "").toLowerCase();
+                            // Filtriamo o cerchiamo indizi del controller destro / Oculus / Meta
+                            if (idStr.includes('right') || idStr.includes('oculus') || idStr.includes('meta') || i === 0) {
+                                let trig = gp.buttons[0] ? gp.buttons[0].value.toFixed(2) : "N/D";
+                                let stickX = gp.axes.length > 2 ? gp.axes[2].toFixed(2) : (gp.axes.length > 0 ? gp.axes[0].toFixed(2) : "N/D");
 
-                            let stickVal = gp.axes.length > 2 ? gp.axes[2] : (gp.axes.length > 0 ? gp.axes[0] : 0);
-
-                            if (trigVal > 0.05 || Math.abs(stickVal) > 0.05 || i === 0) {
-                                this.triggerValue = trigVal;
-                                this.stickX = stickVal;
-                                infoString += `XInput: ${gp.id.substring(0, 12)}\nRT/TRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
-                                inputDetected = true;
+                                output += "[Gamepad API Fallback]\n";
+                                output += "Index [" + i + "] ID: " + gp.id.substring(0, 20) + "\n";
+                                output += "Grilletto: " + trig + " | StickX: " + stickX + "\n";
+                                rightFound = true;
                                 break;
                             }
                         }
                     }
                 }
 
-                if (!inputDetected) {
-                    infoString += "Nessun comando attivo.\nPremi grilletto o stick.";
-                    this.triggerValue = 0;
-                    this.stickX = 0;
+                if (!rightFound) {
+                    output += "\nNessun controller destro rilevato.\nAssicurati di premere il tasto 'VR'\nin basso a destra e di indossare il visore.";
                 }
 
-                // Aggiornamento sicuro del testo di debug
                 if (this.debugText) {
-                    this.debugText.setAttribute('value', infoString);
-                }
-
-                // --- DINAMICA DI VOLO ---
-                let targetHeight = 0.6 + (this.triggerValue * 2.5);
-                this.height += (targetHeight - this.height) * dt * 3.0;
-
-                let moveSpeed = 0.8 + (this.stickX * 2.0);
-                this.angle += moveSpeed * dt;
-                let x = Math.cos(this.angle) * this.radius;
-                let z = Math.sin(this.angle) * this.radius;
-                this.el.setAttribute('position', { x: x, y: this.height, z: z });
-
-                let rotationY = -this.angle * (180 / Math.PI) + 180;
-                if (this.modelEl) {
-                    this.modelEl.setAttribute('rotation', { x: this.triggerValue * -12, y: rotationY, z: 0 });
-                }
-
-                // Controllo elica
-                if (this.rotorEl) {
-                    if (this.triggerValue > 0.05) {
-                        let speedDuration = Math.max(20, 300 - (this.triggerValue * 280));
-                        this.rotorEl.setAttribute('animation', `property: rotation; to: 0 360 0; loop: true; dur: ${speedDuration}; easing: linear`);
-                    } else {
-                        this.rotorEl.removeAttribute('animation');
-                        this.rotorEl.setAttribute('rotation', '0 0 0');
-                    }
+                    this.debugText.setAttribute('value', output);
                 }
             }
         });
     </script>
 </head>
 <body>
-    <a-scene xr-mode-ui="enabled: true">
-        <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
-        <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
+    <a-scene xr-mode-ui="enabled: true" controller-debug>
+        <a-light type="ambient" color="#FFF" intensity="1"></a-light>
 
-        <a-box position="0 -0.5 0" width="10" height="1" depth="10" material="color: #2b2b2b"></a-box>
-        <a-cylinder position="0 0 0" radius="0.2" height="1.5" color="#FFCC00"></a-cylinder>
+        <!-- Sfondo grigio neutro per orientarsi -->
+        <a-plane position="0 0 -5" width="20" height="20" color="#222"></a-plane>
 
-        <!-- Pannello HUD di diagnostica -->
-        <a-entity position="0 1.8 -2">
-            <a-plane width="2.8" height="1.2" color="#000000" opacity="0.85"></a-plane>
-            <a-text id="status-text" value="Caricamento..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
+        <!-- Pannello HUD fluttuante gigante davanti agli occhi -->
+        <a-entity position="0 1.6 -1.8">
+            <a-plane width="2.4" height="1.4" color="#000000" opacity="0.9" material="shader: flat"></a-plane>
+            <a-text id="debug-text" value="In attesa di connessione WebXR..." position="0 0 0.01" align="center" color="#00FF66" width="3.2" font="monoid"></a-text>
         </a-entity>
 
-        <!-- Elicottero con componente allegato -->
-        <a-entity vertibird-flight>
-            <a-entity position="0 0.75 0">
-                <a-box position="-1.5 0 0" width="3.0" height="0.03" depth="0.03" color="#FFCC00"></a-box>
-                
-                <a-entity id="heli-model" position="-3.0 0 0" rotation="0 90 0">
-                    <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #388E3C; roughness: 0.3"></a-box>
-                    <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65; roughness: 0.1"></a-sphere>
-                    <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #2E7D32"></a-cylinder>
-                    <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #388E3C" rotation="0 0 -15"></a-box>
-                    <a-box position="-0.05 -0.37 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
-                    <a-box position="-0.05 -0.37 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
-
-                    <a-entity position="0 0.24 0">
-                        <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
-                        <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
-                        <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" material="color: #111">
-                        </a-box>
-                    </a-entity>
-                </a-entity>
-            </a-entity>
-        </a-entity>
-
-        <a-entity id="rig" position="0 1.6 3">
-            <a-camera></a-camera>
-        </a-entity>
+        <a-camera></a-camera>
     </a-scene>
 </body>
 </html>

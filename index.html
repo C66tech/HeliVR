@@ -2,10 +2,9 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Scene Scaling & VR Button</title>
+    <title>VR Vertibird Simulator - World Drag & Scale</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE: Gestione Input, Scaling della scena e Fisica del Vertibird
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
                 this.angle = 0;        
@@ -18,15 +17,18 @@
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
 
-                // Gestione dello Scale della scena (World Scaling)
-                this.sceneEl = document.querySelector('a-scene');
-                this.currentScale = 1.0; // Scala normale (1:1)
+                // Gestione dello Scale e del Drag del Diorama
+                this.worldRoot = document.querySelector('#world-root');
+                this.currentScale = 1.0; 
+                this.isDragging = false;
+                this.grabOffset = new THREE.Vector3();
                 
                 this.heliWrapperEl = document.querySelector('#heli-wrapper');
                 this.heliPitchEl = document.querySelector('#heli-pitch');
                 this.rotorEl = document.querySelector('#main-rotor');
                 this.tailRotorEl = document.querySelector('#tail-rotor');
                 this.debugText = document.querySelector('#debug-text');
+                this.rightHandEl = document.querySelector('#right-hand');
 
                 // --- SISTEMA AUDIO ---
                 this.audioCtx = null;
@@ -63,23 +65,21 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // --- FUNZIONE DI SCALING GLOBALE ---
+                // --- FUNZIONE DI SCALING REALE DEL MONDO ---
                 const applyScale = (delta) => {
-                    this.currentScale = Math.min(2.5, Math.max(0.3, this.currentScale + delta));
-                    this.sceneEl.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
+                    this.currentScale = Math.min(3.0, Math.max(0.2, this.currentScale + delta));
+                    if (this.worldRoot) {
+                        this.worldRoot.setAttribute('scale', `${this.currentScale} ${this.currentScale} ${this.currentScale}`);
+                    }
                 };
 
-                // --- ASCOLTO TASTI A e B (Scala Intera Scena) ---
-                let rightHand = document.querySelector('#right-hand');
-                
-                // Tasto A: Rimpicciolisce la scena (fa sembrare il plastico più piccolo)
-                rightHand.addEventListener('abuttondown', () => {
-                    applyScale(-0.15);
+                // --- ASCOLTO TASTI A e B ---
+                this.rightHandEl.addEventListener('abuttondown', () => {
+                    applyScale(-0.15); // Rimpicciolisce il plastico
                 });
 
-                // Tasto B: Ingrandisce la scena (fa sembrare il plastico più grande / vicino)
-                rightHand.addEventListener('bbuttondown', () => {
-                    applyScale(0.15);
+                this.rightHandEl.addEventListener('bbuttondown', () => {
+                    applyScale(0.15);  // Ingrandisce il plastico
                 });
             },
             tick: function (time, delta) {
@@ -87,31 +87,36 @@
                 let t = time / 1000; 
                 
                 let trigger = 0;
+                let grip = 0;
                 let stickY = 0;
                 let controllerActive = false;
+                let gp = null;
 
-                // --- 1. LETTURA INPUT ---
+                // --- 1. LETTURA INPUT (Trigger, Grip, Stick) ---
                 let xrSession = this.el.sceneEl.renderer ? this.el.sceneEl.renderer.xr.getSession() : null;
                 if (xrSession && xrSession.inputSources) {
                     for (let source of xrSession.inputSources) {
                         if (source.handedness === 'right' && source.gamepad) {
-                            trigger = source.gamepad.buttons[0] ? source.gamepad.buttons[0].value : 0;
-                            stickY = source.gamepad.axes.length >= 4 ? source.gamepad.axes[3] : (source.gamepad.axes.length >= 2 ? source.gamepad.axes[1] : 0);
-                            controllerActive = true;
+                            gp = source.gamepad;
                             break;
                         }
                     }
                 }
-                if (!controllerActive) {
+                if (!gp) {
                     let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-                    for (let gp of gamepads) {
-                        if (gp && gp.connected && (gp.hand === 'right' || (gp.id && gp.id.toLowerCase().includes('right')))) {
-                            trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
-                            stickY = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
-                            controllerActive = true;
+                    for (let g of gamepads) {
+                        if (g && g.connected && (g.hand === 'right' || (g.id && g.id.toLowerCase().includes('right')))) {
+                            gp = g;
                             break;
                         }
                     }
+                }
+
+                if (gp) {
+                    controllerActive = true;
+                    trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
+                    grip = gp.buttons[1] ? (gp.buttons[1].value || (gp.buttons[1].pressed ? 1 : 0)) : 0;
+                    stickY = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
                 }
 
                 if (trigger > 0.02) {
@@ -121,7 +126,38 @@
                 if (Math.abs(stickY) < 0.15) stickY = 0;
                 if (trigger < 0.02) trigger = 0;
 
-                // --- 2. INERZIA ---
+                // --- 2. LOGICA DI SPOSTAMENTO DIORAMA (GRIP / SECONDO GRILLETTO) ---
+                if (this.rightHandEl && this.rightHandEl.object3D) {
+                    let handObj = this.rightHandEl.object3D;
+                    let pos = new THREE.Vector3();
+                    let dir = new THREE.Vector3(0, 0, -1);
+                    handObj.getWorldPosition(pos);
+                    dir.applyQuaternion(handObj.getWorldQuaternion(new THREE.Quaternion()));
+
+                    // Intersezione del raggio del controller con il piano del pavimento (y = 0)
+                    if (dir.y < 0) {
+                        let rayT = -pos.y / dir.y;
+                        let hitX = pos.x + rayT * dir.x;
+                        let hitZ = pos.z + rayT * dir.z;
+                        let hitPoint = new THREE.Vector3(hitX, 0, hitZ);
+
+                        if (grip > 0.5) {
+                            if (!this.isDragging) {
+                                this.isDragging = true;
+                                let rootPos = new THREE.Vector3();
+                                this.worldRoot.object3D.getWorldPosition(rootPos);
+                                this.grabOffset.copy(rootPos).sub(hitPoint);
+                            } else {
+                                let newWorldPos = hitPoint.clone().add(this.grabOffset);
+                                this.worldRoot.setAttribute('position', `${newWorldPos.x} ${newWorldPos.y} ${newWorldPos.z}`);
+                            }
+                        } else {
+                            this.isDragging = false;
+                        }
+                    }
+                }
+
+                // --- 3. INERZIA ---
                 this.currentThrottle += (trigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (stickY - this.currentStickY) * dt * 6.0;
 
@@ -131,7 +167,7 @@
                         "Sveglia Controller");
                 }
 
-                // --- 3. TURBOLENZE ---
+                // --- 4. TURBOLENZE ---
                 let heightNoise = 0;
                 let pitchNoise = 0;
                 
@@ -140,7 +176,7 @@
                     pitchNoise = ((Math.sin(t * 1.8) * 1.2) + (Math.cos(t * 4.4) * 0.8)) * this.currentThrottle;
                 }
 
-                // --- 4. FISICA DELL'ALTEZZA ---
+                // --- 5. FISICA DELL'ALTEZZA ---
                 let takeoffThreshold = 0.35; 
                 let effectiveThrottle = 0;
                 
@@ -155,7 +191,7 @@
                 let hingeAngleRad = Math.asin((this.heliY - 1.1) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
 
-                // --- 5. ASSETTO DEL MUSO ---
+                // --- 6. ASSETTO DEL MUSO ---
                 let speedFactor = this.currentStickY; 
                 let pitchAngle = (speedFactor * 15.0) + pitchNoise; 
                 
@@ -167,7 +203,7 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 6. MOTO CIRCOLARE ---
+                // --- 7. MOTO CIRCOLARE ---
                 if (this.heliY > 0.255) {
                     let angularSpeed = -speedFactor * this.currentThrottle * 90.0; 
                     this.angle += angularSpeed * dt;
@@ -175,7 +211,7 @@
 
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // --- 7. ROTAZIONE PALE ---
+                // --- 8. ROTAZIONE PALE ---
                 if (this.currentThrottle > 0.01) {
                     let rotSpeed = this.currentThrottle * 4000; 
                     this.rotorAngle += rotSpeed * dt;
@@ -189,7 +225,7 @@
                     }
                 }
 
-                // --- 8. AUDIO ---
+                // --- 9. AUDIO ---
                 if (this.audioInitialized && this.oscillator && this.gainNode && this.audioCtx) {
                     let targetFreq = 30 + (this.currentThrottle * 70);
                     let targetVolume = this.currentThrottle > 0.01 ? 0.18 : 0.0;
@@ -200,17 +236,16 @@
         });
     </script>
     <style>
-        /* Pulsante VR HTML personalizzato in evidenza sullo schermo */
-        #vr-button-container {
+        #xr-button-container {
             position: fixed;
             bottom: 20px;
             right: 20px;
             z-index: 9999;
         }
-        .custom-vr-btn {
-            background-color: #2e7d32;
+        .custom-xr-btn {
+            background-color: #1565c0;
             color: white;
-            border: 2px solid #4caf50;
+            border: 2px solid #1e88e5;
             padding: 12px 24px;
             font-size: 16px;
             font-weight: bold;
@@ -219,75 +254,80 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             transition: background 0.2s;
         }
-        .custom-vr-btn:hover {
-            background-color: #388e3c;
+        .custom-xr-btn:hover {
+            background-color: #1976d2;
         }
     </style>
 </head>
 <body>
-    <!-- Pulsante HTML per entrare in VR garantito -->
-    <div id="vr-button-container">
-        <button class="custom-vr-btn" onclick="document.querySelector('a-scene').enterVR()">ENTRA IN VR</button>
+    <!-- Pulsante HTML per avviare la sessione Immersive XR -->
+    <div id="xr-button-container">
+        <button class="custom-xr-btn" onclick="document.querySelector('a-scene').enterVR()">ENTRA IN XR</button>
     </div>
 
     <a-scene xr-mode-ui="enabled: true">
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- Pavimentazione -->
-        <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="color: #2b2b2b"></a-box>
-        
-        <!-- Perno Centrale a Cono -->
-        <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
-
-        <!-- VERTIBIRD -->
-        <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
+        <!-- CONTENITORE GLOBALE DEL DIORAMA (Spostabile e Scalabile) -->
+        <a-entity id="world-root" position="0 0 0" scale="1 1 1">
             
-            <!-- Asta Meccanica -->
-            <a-box id="rod" position="2.25 0 0" width="4.5" height="0.02" depth="0.02" color="#FFCC00"></a-box>
+            <!-- Pavimentazione -->
+            <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="color: #2b2b2b"></a-box>
             
-            <!-- Wrapper Elicottero -->
-            <a-entity id="heli-wrapper" position="4.5 0 0">
-                <a-entity id="heli-yaw" rotation="0 90 0">
-                    <a-entity id="heli-pitch" rotation="0 0 0">
-                        
-                        <!-- Cabina Principale (Sfera Rossa) -->
-                        <a-sphere position="0 0 0" radius="0.35" material="color: #E53935; roughness: 0.3"></a-sphere>
+            <!-- Perno Centrale a Cono -->
+            <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
 
-                        <!-- Struttura di Coda (Cono Verde) -->
-                        <a-cone position="-0.9 0.05 0" radius-bottom="0.22" radius-top="0.08" height="1.4" rotation="0 0 90" material="color: #43A047"></a-cone>
+            <!-- VERTIBIRD -->
+            <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
+                
+                <!-- Asta Meccanica -->
+                <a-box id="rod" position="2.25 0 0" width="4.5" height="0.02" depth="0.02" color="#FFCC00"></a-box>
+                
+                <!-- Wrapper Elicottero -->
+                <a-entity id="heli-wrapper" position="4.5 0 0">
+                    <a-entity id="heli-yaw" rotation="0 90 0">
+                        <a-entity id="heli-pitch" rotation="0 0 0">
+                            
+                            <!-- Cabina Principale (Sfera Rossa) -->
+                            <a-sphere position="0 0 0" radius="0.35" material="color: #E53935; roughness: 0.3"></a-sphere>
 
-                        <!-- Rotore di Coda (Piramide/Triangolo Viola) -->
-                        <a-entity position="-1.65 0.12 0" rotation="0 0 -90">
-                            <a-cone radius-bottom="0.18" height="0.25" segments-radial="3" material="color: #8E24AA"></a-cone>
-                            <a-box id="tail-rotor" width="0.4" height="0.015" depth="0.08" color="#FFEB3B" rotation="90 0 0"></a-box>
+                            <!-- Struttura di Coda (Cono Verde) -->
+                            <a-cone position="-0.9 0.05 0" radius-bottom="0.22" radius-top="0.08" height="1.4" rotation="0 0 90" material="color: #43A047"></a-cone>
+
+                            <!-- Rotore di Coda (Piramide/Triangolo Viola) -->
+                            <a-entity position="-1.65 0.12 0" rotation="0 0 -90">
+                                <a-cone radius-bottom="0.18" height="0.25" segments-radial="3" material="color: #8E24AA"></a-cone>
+                                <a-box id="tail-rotor" width="0.4" height="0.015" depth="0.08" color="#FFEB3B" rotation="90 0 0"></a-box>
+                            </a-entity>
+
+                            <!-- Pattini e Carrello (Viola) -->
+                            <a-box position="0.1 -0.3 -0.22" width="0.7" height="0.025" depth="0.03" material="color: #8E24AA"></a-box>
+                            <a-box position="0.1 -0.3 0.22" width="0.7" height="0.025" depth="0.03" material="color: #8E24AA"></a-box>
+                            <a-box position="0.15 -0.16 -0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 15" material="color: #8E24AA"></a-box>
+                            <a-box position="-0.15 -0.16 -0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 -15" material="color: #8E24AA"></a-box>
+                            <a-box position="0.15 -0.16 0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 15" material="color: #8E24AA"></a-box>
+                            <a-box position="-0.15 -0.16 0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 -15" material="color: #8E24AA"></a-box>
+
+                            <!-- Rotore Principale (Albero e Pale Gialle) -->
+                            <a-entity position="0 0.35 0">
+                                <a-cylinder radius="0.04" height="0.15" material="color: #8E24AA"></a-cylinder>
+                                <a-sphere position="0 0.08 0" radius="0.07" material="color: #FFCC00"></a-sphere>
+                                <a-box id="main-rotor" position="0 0.12 0" width="3.0" height="0.012" depth="0.12" color="#FFEB3B"></a-box>
+                            </a-entity>
+
                         </a-entity>
-
-                        <!-- Pattini e Carrello (Viola) -->
-                        <a-box position="0.1 -0.3 -0.22" width="0.7" height="0.025" depth="0.03" material="color: #8E24AA"></a-box>
-                        <a-box position="0.1 -0.3 0.22" width="0.7" height="0.025" depth="0.03" material="color: #8E24AA"></a-box>
-                        <a-box position="0.15 -0.16 -0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 15" material="color: #8E24AA"></a-box>
-                        <a-box position="-0.15 -0.16 -0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 -15" material="color: #8E24AA"></a-box>
-                        <a-box position="0.15 -0.16 0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 15" material="color: #8E24AA"></a-box>
-                        <a-box position="-0.15 -0.16 0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 -15" material="color: #8E24AA"></a-box>
-
-                        <!-- Rotore Principale (Albero e Pale Gialle) -->
-                        <a-entity position="0 0.35 0">
-                            <a-cylinder radius="0.04" height="0.15" material="color: #8E24AA"></a-cylinder>
-                            <a-sphere position="0 0.08 0" radius="0.07" material="color: #FFCC00"></a-sphere>
-                            <a-box id="main-rotor" position="0 0.12 0" width="3.0" height="0.012" depth="0.12" color="#FFEB3B"></a-box>
-                        </a-entity>
-
                     </a-entity>
                 </a-entity>
             </a-entity>
-        </a-entity>
+
+        </a-entity> <!-- /world-root -->
 
         <!-- Camera e Giocatore -->
         <a-entity id="rig" position="0 0 7.5">
             <a-camera position="0 1.5 0"></a-camera>
             
-            <!-- Controller Destro con tasti A/B abilitati per scalare l'intera scena -->
+            <!-- Controller Destro con tasti A/B (Zoom) e Grip (Spostamento Diorama) -->
             <a-entity id="right-hand" oculus-touch-controls="hand: right">
                 <a-text id="debug-text" value="Pronto" position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#00FF66" align="center"></a-text>
             </a-entity>

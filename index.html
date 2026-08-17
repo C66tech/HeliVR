@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird - Green & Trigger Rotor</title>
+    <title>VR Vertibird - Controller Diagnostics</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.register-component('vertibird-flight', {
@@ -11,61 +11,77 @@
                 this.height = 1.0;
                 this.radius = 3.0;
                 this.triggerValue = 0;
+                this.stickX = 0;
                 
-                this.rightController = document.querySelector('#right-hand');
                 this.rotorEl = document.querySelector('#main-rotor');
                 this.modelEl = this.el.querySelector('#heli-model');
-
-                if (this.rightController) {
-                    // Legge la pressione analogica del grilletto (da 0 a 1)
-                    this.rightController.addEventListener('triggerchanged', (evt) => {
-                        this.triggerValue = evt.detail.value;
-                    });
-                    this.rightController.addEventListener('triggerdown', () => {
-                        this.triggerValue = 1.0;
-                    });
-                    this.rightController.addEventListener('triggerup', () => {
-                        this.triggerValue = 0.0;
-                    });
-                }
+                this.debugText = document.querySelector('#status-text');
             },
             tick: function (time, delta) {
                 let dt = delta / 1000;
 
-                // Fallback: legge direttamente dalla Gamepad API se gli eventi A-Frame faticano ad agganciarsi
+                // Scansione aggressiva di tutti i gamepad connessi (WebXR / Browser)
                 let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+                let activeGp = null;
+                let infoString = "Cerca controller...\n";
+
                 for (let i = 0; i < gamepads.length; i++) {
                     let gp = gamepads[i];
-                    if (gp && gp.hand === 'right' && gp.buttons[0]) {
-                        this.triggerValue = gp.buttons[0].value;
-                        break;
+                    if (gp) {
+                        infoString += `[${i}] ${gp.id.substring(0, 15)} (B:${gp.buttons.length} A:${gp.axes.length})\n`;
+                        // Cerca il controller destro o il primo disponibile
+                        if (gp.hand === 'right' || gp.id.toLowerCase().includes('right') || gp.id.toLowerCase().includes('oculus') || gp.id.toLowerCase().includes('meta') || i === 0) {
+                            activeGp = gp;
+                        }
                     }
+                }
+
+                if (activeGp) {
+                    // Legge il grilletto (di solito bottone 0 o 1)
+                    if (activeGp.buttons[0]) {
+                        this.triggerValue = activeGp.buttons[0].value;
+                    }
+                    // Legge la levetta X (di solito asse 2 o 0)
+                    if (activeGp.axes.length > 2) {
+                        this.stickX = activeGp.axes[2];
+                    } else if (activeGp.axes.length > 0) {
+                        this.stickX = activeGp.axes[0];
+                    }
+
+                    infoString += `TRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
+                } else {
+                    infoString += "Nessun gamepad rilevato!";
+                    this.triggerValue = 0;
+                }
+
+                // Aggiorna il testo del pannello nel visore
+                if (this.debugText) {
+                    this.debugText.setAttribute('value', infoString);
                 }
 
                 // 1. Movimento in altezza proporzionale al grilletto
                 let targetHeight = 0.6 + (this.triggerValue * 2.5);
                 this.height += (targetHeight - this.height) * dt * 3.0;
 
-                // 2. Rotazione continua attorno al perno
-                this.angle += 0.8 * dt;
+                // 2. Rotazione continua o controllata dalla levetta
+                let moveSpeed = 0.8 + (this.stickX * 2.0);
+                this.angle += moveSpeed * dt;
                 let x = Math.cos(this.angle) * this.radius;
                 let z = Math.sin(this.angle) * this.radius;
                 this.el.setAttribute('position', { x: x, y: this.height, z: z });
 
-                // Inclinazione del muso (tilt) quando sale
+                // Inclinazione del muso
                 let rotationY = -this.angle * (180 / Math.PI) + 180;
                 if (this.modelEl) {
                     this.modelEl.setAttribute('rotation', { x: this.triggerValue * -12, y: rotationY, z: 0 });
                 }
 
-                // 3. Controllo dinamico dell'elica: ferma se trigger = 0, gira veloce se trigger = 1
+                // 3. Controllo elica
                 if (this.rotorEl) {
                     if (this.triggerValue > 0.05) {
-                        // Più premi, minore è la durata di un giro (quindi gira più forte)
                         let speedDuration = Math.max(20, 300 - (this.triggerValue * 280));
                         this.rotorEl.setAttribute('animation', `property: rotation; to: 0 360 0; loop: true; dur: ${speedDuration}; easing: linear`);
                     } else {
-                        // Ferma l'animazione dell'elica
                         this.rotorEl.removeAttribute('animation');
                         this.rotorEl.setAttribute('rotation', '0 0 0');
                     }
@@ -86,31 +102,25 @@
         <!-- Perno centrale -->
         <a-cylinder position="0 0 0" radius="0.2" height="1.5" color="#FFCC00"></a-cylinder>
 
+        <!-- Pannello di diagnostica 3D fluttuante davanti a te -->
+        <a-entity position="0 1.8 -2">
+            <a-plane width="2.5" height="1.2" color="#000000" opacity="0.85"></a-plane>
+            <a-text id="status-text" value="Avvio diagnostica..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
+        </a-entity>
+
         <!-- Elicottero Verde -->
         <a-entity id="vertibird" vertibird-flight>
             <a-entity position="0 0.75 0">
-                <!-- Braccio meccanico -->
                 <a-box position="-1.5 0 0" width="3.0" height="0.03" depth="0.03" color="#FFCC00"></a-box>
                 
-                <!-- Modello Elicottero -->
                 <a-entity id="heli-model" position="-3.0 0 0" rotation="0 90 0">
-                    <!-- Cabina principale VERDE MILITARE -->
                     <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #388E3C; roughness: 0.3"></a-box>
-                    
-                    <!-- Cabina vetrata -->
                     <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65; roughness: 0.1"></a-sphere>
-                    
-                    <!-- Trave di coda -->
                     <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #2E7D32"></a-cylinder>
-                    
-                    <!-- Stabilizzatori -->
                     <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #388E3C" rotation="0 0 -15"></a-box>
-                    
-                    <!-- Pattini -->
                     <a-box position="-0.05 -0.37 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
                     <a-box position="-0.05 -0.37 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
 
-                    <!-- Rotore Principale (Inizia FERMO per default) -->
                     <a-entity position="0 0.24 0">
                         <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
                         <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>

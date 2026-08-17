@@ -2,37 +2,59 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Native Events</title>
+    <title>VR Vertibird Simulator - Raw Gamepad Polling</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE 1: Ascolta gli eventi nativi di A-Frame sul controller
-        AFRAME.registerComponent('quest-input', {
+        // COMPONENTE 1: Polling grezzo della Gamepad API
+        AFRAME.registerComponent('raw-gamepad-reader', {
             init: function () {
                 this.trigger = 0;
                 this.stickX = 0;
                 this.textEl = this.el.querySelector('a-text');
-
-                // Ascolta la pressione analogica del grilletto (valore da 0 a 1)
-                this.el.addEventListener('triggerchanged', (evt) => {
-                    this.trigger = evt.detail.value;
-                });
-
-                // Ascolta il movimento analogico della levetta (valore da -1 a 1)
-                this.el.addEventListener('thumbstickmoved', (evt) => {
-                    this.stickX = evt.detail.x;
-                });
-
-                // Fallback di sicurezza: se "triggerchanged" non scatta, prende il click netto
-                this.el.addEventListener('triggerdown', () => { this.trigger = 1.0; });
-                this.el.addEventListener('triggerup', () => { this.trigger = 0.0; });
             },
             tick: function () {
-                // Aggiorna il testo HUD in tempo reale sul controller
-                if (this.textEl) {
-                    this.textEl.setAttribute('value', `Grilletto: ${this.trigger.toFixed(2)}\nLevetta X: ${this.stickX.toFixed(2)}`);
+                let gp = null;
+                // 1. Prova a estrarre il gamepad direttamente dal componente tracked-controls di A-Frame
+                let tracked = this.el.components['tracked-controls'];
+                if (tracked && tracked.controller) {
+                    gp = tracked.controller;
+                } else {
+                    // 2. Fallback aggressivo: cerca direttamente nella Gamepad API del browser
+                    let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+                    for (let i = 0; i < gamepads.length; i++) {
+                        if (gamepads[i] && (gamepads[i].hand === 'right' || (gamepads[i].id && gamepads[i].id.toLowerCase().includes('right')))) {
+                            gp = gamepads[i];
+                            break;
+                        }
+                    }
                 }
 
-                // Invia i comandi al simulatore di volo
+                if (gp) {
+                    // Lettura bruta dei valori
+                    this.trigger = (gp.buttons && gp.buttons.length > 0) ? gp.buttons[0].value : 0;
+                    
+                    if (gp.axes) {
+                        if (gp.axes.length > 2) {
+                            this.stickX = gp.axes[2];
+                        } else if (gp.axes.length > 0) {
+                            this.stickX = gp.axes[0];
+                        } else {
+                            this.stickX = 0;
+                        }
+                    }
+                    
+                    if (this.textEl) {
+                        this.textEl.setAttribute('value', `ID: ${gp.id ? gp.id.substring(0,10) : 'OK'}\nTrig: ${this.trigger.toFixed(2)}\nX: ${this.stickX.toFixed(2)}`);
+                    }
+                } else {
+                    this.trigger = 0;
+                    this.stickX = 0;
+                    if (this.textEl) {
+                        this.textEl.setAttribute('value', "Controller NON rilevato\n(Sveglialo/Muovilo)");
+                    }
+                }
+
+                // Invia i dati al componente di volo dell'elicottero
                 let heli = document.getElementById('vertibird');
                 if (heli && heli.components['vertibird-flight']) {
                     heli.components['vertibird-flight'].triggerValue = this.trigger;
@@ -127,8 +149,8 @@
             <a-camera></a-camera>
             
             <!-- Controller Destro con Input e HUD integrato -->
-            <a-entity id="right-hand" oculus-touch-controls="hand: right" quest-input>
-                <a-text value="In ascolto..." position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#FF3333" align="center"></a-text>
+            <a-entity id="right-hand" oculus-touch-controls="hand: right" raw-gamepad-reader>
+                <a-text value="Inizializzazione HUD..." position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#FF3333" align="center"></a-text>
             </a-entity>
 
             <!-- Controller Sinistro -->

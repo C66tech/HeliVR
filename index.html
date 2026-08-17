@@ -2,20 +2,20 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Fast & Realistic Flight</title>
+    <title>VR Vertibird Simulator - Wide Flight & Cone Pivot</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.angle = 0;        // Angolo sul cerchio in gradi
-                this.heliY = 0.25;     // Altezza fisica (a terra)
-                this.radius = 3.0;     // Raggio dei binari
+                this.angle = 0;        
+                this.heliY = 0.25;     
+                this.radius = 4.5;     // RAGGIO AUMENTATO A 4.5 METRI
                 
-                // Variabili di inerzia (smoothing)
+                // Variabili di inerzia
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
 
-                // Angoli di rotazione manuale delle pale
+                // Angoli di rotazione pale
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
                 
@@ -25,7 +25,7 @@
                 this.tailRotorEl = document.querySelector('#tail-rotor');
                 this.debugText = document.querySelector('#debug-text');
 
-                // --- SISTEMA AUDIO (Ronzio profondo) ---
+                // --- SISTEMA AUDIO ---
                 this.audioCtx = null;
                 this.oscillator = null;
                 this.gainNode = null;
@@ -94,7 +94,6 @@
                     this.initAudio();
                 }
 
-                // Deadzone per levetta e grilletto
                 if (Math.abs(stickY) < 0.15) stickY = 0;
                 if (trigger < 0.02) trigger = 0;
 
@@ -108,7 +107,7 @@
                         "Sveglia Controller");
                 }
 
-                // --- 3. FISICA DELL'ALTEZZA CON SOGLIA DI DECOLLO ---
+                // --- 3. FISICA DELL'ALTEZZA (Soglia e Quota Maggiore) ---
                 let takeoffThreshold = 0.35; 
                 let effectiveThrottle = 0;
                 
@@ -116,39 +115,33 @@
                     effectiveThrottle = (this.currentThrottle - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                let targetHeliY = 0.25 + (effectiveThrottle * 1.5);
+                // L'elicottero ora può salire molto più in alto (fino a 2.75 metri)
+                let targetHeliY = 0.25 + (effectiveThrottle * 2.5);
                 this.heliY += (targetHeliY - this.heliY) * dt * 4.0;
                 if (this.heliY < 0.25) this.heliY = 0.25;
 
-                // Inclinazione dell'asta (Perno Y = 0.45m)
-                let hingeAngleRad = Math.asin((this.heliY - 0.45) / this.radius);
+                // La cerniera dell'asta è ora fissata a Y = 1.1m (vicino alla cima del cono)
+                let hingeAngleRad = Math.asin((this.heliY - 1.1) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
 
-                // --- 4. ASSETTO E INCLINAZIONE DEL MUSO (Pitch) ---
-                let speedFactor = this.currentStickY; // Negativo = avanti, Positivo = indietro
-                
-                // Pitch: Leva avanti (negativo) = Muso in basso (angolo Z negativo)
-                let pitchAngle = speedFactor * 20.0; 
+                // --- 4. ASSETTO DEL MUSO (Pitch) ---
+                let speedFactor = this.currentStickY; 
+                let pitchAngle = speedFactor * 15.0; 
                 
                 if (this.heliWrapperEl) {
-                    // Contro-rotazione per mantenere l'orizzontalità
                     this.heliWrapperEl.setAttribute('rotation', { x: 0, y: 0, z: -hingeAngleDeg });
                 }
 
                 if (this.heliPitchEl) {
-                    // Applica l'inclinazione comandata
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 5. MOTO CIRCOLARE (Corretto e Velocizzato!) ---
-                // Se è decollato (altezza > 0.255)
+                // --- 5. MOTO CIRCOLARE ---
                 if (this.heliY > 0.255) {
-                    // Moltiplicatore aumentato a 150 gradi/sec al massimo della potenza!
-                    let angularSpeed = -speedFactor * this.currentThrottle * 150.0; 
+                    let angularSpeed = -speedFactor * this.currentThrottle * 1.5; // Leggermente ritoccata per compensare il raggio più ampio
                     this.angle += angularSpeed * dt;
                 }
 
-                // Applica tutto all'asta principale
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
                 // --- 6. ROTAZIONE DELLE PALE ---
@@ -182,24 +175,21 @@
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
         <!-- Pavimentazione / Piano d'atterraggio -->
-        <a-box position="0 -0.05 0" width="10" height="0.1" depth="10" material="color: #2b2b2b"></a-box>
+        <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="color: #2b2b2b"></a-box>
         
-        <!-- Perno Centrale (Altezza centro Y = 0.45m) -->
-        <a-cylinder position="0 0.45 0" radius="0.15" height="0.9" color="#FFCC00"></a-cylinder>
+        <!-- Perno Centrale (A forma di CONO, altezza totale 1.2m) -->
+        <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
 
-        <!-- CERNIERA E ASTA DEL VERTIBIRD -->
-        <a-entity id="vertibird" position="0 0.45 0" vertibird-flight>
+        <!-- CERNIERA E ASTA DEL VERTIBIRD (Cerniera alzata a Y = 1.1m) -->
+        <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
             
-            <!-- Asta Meccanica -->
-            <a-box id="rod" position="1.5 0 0" width="3.0" height="0.02" depth="0.02" color="#FFCC00"></a-box>
+            <!-- Asta Meccanica Allungata (Centro a 2.25, lunghezza totale 4.5m) -->
+            <a-box id="rod" position="2.25 0 0" width="4.5" height="0.02" depth="0.02" color="#FFCC00"></a-box>
             
-            <!-- Wrapper Elicottero -->
-            <a-entity id="heli-wrapper" position="3.0 0 0">
+            <!-- Wrapper Elicottero Spostato a 4.5m dal centro -->
+            <a-entity id="heli-wrapper" position="4.5 0 0">
                 
-                <!-- Tangente al cerchio -->
                 <a-entity id="heli-yaw" rotation="0 90 0">
-                    
-                    <!-- Pitch: Inclinazione avanti/indietro -->
                     <a-entity id="heli-pitch" rotation="0 0 0">
                         
                         <!-- Modello Elicottero -->
@@ -212,14 +202,14 @@
                         <a-box position="-0.05 -0.25 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #D32F2F"></a-box>
                         <a-box position="-0.05 -0.25 0.22" width="0.75" height="0.025" depth="0.035" material="color: #D32F2F"></a-box>
 
-                        <!-- Rotore Principale (PALE GIALLE) -->
+                        <!-- Rotore Principale -->
                         <a-entity position="0 0.24 0">
                             <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
                             <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
                             <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                         </a-entity>
 
-                        <!-- Rotore di Coda (PALE GIALLE) -->
+                        <!-- Rotore di Coda -->
                         <a-entity position="-1.28 0.05 -0.05" rotation="90 0 0">
                             <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.07" color="#FFEB3B"></a-box>
                         </a-entity>
@@ -229,8 +219,8 @@
             </a-entity>
         </a-entity>
 
-        <!-- Camera e Giocatore -->
-        <a-entity id="rig" position="0 0 5.5">
+        <!-- Camera e Giocatore (Arretrati a Z = 7.5 per via del raggio più largo) -->
+        <a-entity id="rig" position="0 0 7.5">
             <a-camera position="0 1.5 0"></a-camera>
             
             <a-entity id="right-hand" oculus-touch-controls="hand: right">

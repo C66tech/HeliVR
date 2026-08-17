@@ -2,16 +2,16 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Advanced Hovering & Flight Dynamics</title>
+    <title>VR Vertibird Simulator - Fast & Realistic Flight</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.angle = 0;        // Angolo sul cerchio (0 = partenza)
+                this.angle = 0;        // Angolo sul cerchio in gradi
                 this.heliY = 0.25;     // Altezza fisica (a terra)
                 this.radius = 3.0;     // Raggio dei binari
                 
-                // Variabili di inerzia (smoothing) per rendere i comandi fluidi
+                // Variabili di inerzia (smoothing)
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
 
@@ -94,7 +94,7 @@
                     this.initAudio();
                 }
 
-                // Deadzone per levetta e grilletto per evitare movimenti fantasma
+                // Deadzone per levetta e grilletto
                 if (Math.abs(stickY) < 0.15) stickY = 0;
                 if (trigger < 0.02) trigger = 0;
 
@@ -108,15 +108,15 @@
                         "Sveglia Controller");
                 }
 
-                // --- 3. FISICA DELL'ALTEZZA CON SOGLIA DI DECOLLO AUMENTATA ---
-                let takeoffThreshold = 0.35; // L'elicottero si alza solo se il gas supera il 35%
+                // --- 3. FISICA DELL'ALTEZZA CON SOGLIA DI DECOLLO ---
+                let takeoffThreshold = 0.35; 
                 let effectiveThrottle = 0;
                 
                 if (this.currentThrottle > takeoffThreshold) {
                     effectiveThrottle = (this.currentThrottle - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                let targetHeliY = 0.25 + (effectiveThrottle * 1.5); // Altezza massima limitata
+                let targetHeliY = 0.25 + (effectiveThrottle * 1.5);
                 this.heliY += (targetHeliY - this.heliY) * dt * 4.0;
                 if (this.heliY < 0.25) this.heliY = 0.25;
 
@@ -140,12 +140,11 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 5. MOTO CIRCOLARE (Solo in volo, dipendente da Gas e Inclinazione) ---
-                // Se è decollato (altezza > 0.255 per superare il limite a terra)
+                // --- 5. MOTO CIRCOLARE (Corretto e Velocizzato!) ---
+                // Se è decollato (altezza > 0.255)
                 if (this.heliY > 0.255) {
-                    // angularSpeed negativo = orario, positivo = antiorario
-                    // speedFactor negativo (avanti) -> deve essere antiorario (positivo)
-                    let angularSpeed = -speedFactor * this.currentThrottle * 2.5; 
+                    // Moltiplicatore aumentato a 150 gradi/sec al massimo della potenza!
+                    let angularSpeed = -speedFactor * this.currentThrottle * 150.0; 
                     this.angle += angularSpeed * dt;
                 }
 
@@ -197,10 +196,10 @@
             <!-- Wrapper Elicottero -->
             <a-entity id="heli-wrapper" position="3.0 0 0">
                 
-                <!-- Tangente al cerchio (Orientamento fisso) -->
+                <!-- Tangente al cerchio -->
                 <a-entity id="heli-yaw" rotation="0 90 0">
                     
-                    <!-- Pitch: Inclinazione avanti/indietro controllata dal giocatore -->
+                    <!-- Pitch: Inclinazione avanti/indietro -->
                     <a-entity id="heli-pitch" rotation="0 0 0">
                         
                         <!-- Modello Elicottero -->
@@ -213,14 +212,14 @@
                         <a-box position="-0.05 -0.25 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #D32F2F"></a-box>
                         <a-box position="-0.05 -0.25 0.22" width="0.75" height="0.025" depth="0.035" material="color: #D32F2F"></a-box>
 
-                        <!-- Rotore Principale Giallo -->
+                        <!-- Rotore Principale (PALE GIALLE) -->
                         <a-entity position="0 0.24 0">
                             <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
                             <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
                             <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                         </a-entity>
 
-                        <!-- Rotore di Coda Giallo -->
+                        <!-- Rotore di Coda (PALE GIALLE) -->
                         <a-entity position="-1.28 0.05 -0.05" rotation="90 0 0">
                             <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.07" color="#FFEB3B"></a-box>
                         </a-entity>

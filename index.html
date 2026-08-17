@@ -2,10 +2,50 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Direct Flight</title>
+    <title>VR Vertibird Simulator - Controller Sync</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        AFRAME.register-component('vertibird-flight', {
+        // COMPONENTE 1: Legge il controller e mostra i dati sulla mano
+        AFRAME.registerComponent('quest-input', {
+            init: function () {
+                this.trigger = 0;
+                this.stickX = 0;
+                this.textEl = this.el.querySelector('a-text');
+            },
+            tick: function () {
+                let tracked = this.el.components['tracked-controls'];
+                let stateText = "In attesa del controller...";
+
+                if (tracked && tracked.controller) {
+                    let gp = tracked.controller;
+                    
+                    // Legge il grilletto (bottone 0) e la levetta X (asse 2 o 0)
+                    if (gp.buttons && gp.buttons[0]) {
+                        this.trigger = gp.buttons[0].value;
+                    }
+                    if (gp.axes) {
+                        if (gp.axes.length > 2) this.stickX = gp.axes[2];
+                        else if (gp.axes.length > 0) this.stickX = gp.axes[0];
+                    }
+                    stateText = `Trig: ${this.trigger.toFixed(2)}\nX: ${this.stickX.toFixed(2)}`;
+                }
+
+                // Stampa i dati sul testo attaccato alla tua mano destra
+                if (this.textEl) {
+                    this.textEl.setAttribute('value', stateText);
+                }
+
+                // Invia i dati al componente di volo dell'elicottero
+                let heli = document.getElementById('vertibird');
+                if (heli && heli.components['vertibird-flight']) {
+                    heli.components['vertibird-flight'].triggerValue = this.trigger;
+                    heli.components['vertibird-flight'].stickX = this.stickX;
+                }
+            }
+        });
+
+        // COMPONENTE 2: Gestisce il volo (riceve i dati da quest-input)
+        AFRAME.registerComponent('vertibird-flight', {
             init: function () {
                 this.angle = 0;
                 this.height = 1.0;
@@ -13,50 +53,30 @@
                 this.triggerValue = 0;
                 this.stickX = 0;
                 
-                // Riferimenti diretti agli elementi 3D
                 this.rotorEl = document.querySelector('#main-rotor');
-                this.modelEl = this.el.querySelector('#heli-model');
+                this.modelEl = document.querySelector('#heli-model');
             },
             tick: function (time, delta) {
                 let dt = delta / 1000;
 
-                // Polling diretto e continuo della Gamepad API (funziona nativamente sul Quest 3)
-                let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-                for (let i = 0; i < gamepads.length; i++) {
-                    let gp = gamepads[i];
-                    if (gp && gp.connected) {
-                        let idLower = (gp.id || "").toLowerCase();
-                        if (idLower.includes('right') || idLower.includes('oculus') || idLower.includes('meta') || gp.hand === 'right' || i === 0) {
-                            if (gp.buttons && gp.buttons[0]) {
-                                this.triggerValue = gp.buttons[0].value;
-                            }
-                            if (gp.axes) {
-                                if (gp.axes.length > 2) this.stickX = gp.axes[2];
-                                else if (gp.axes.length > 0) this.stickX = gp.axes[0];
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                // 1. Dinamica di altezza proporzionale al grilletto
+                // 1. Altezza
                 let targetHeight = 0.6 + (this.triggerValue * 2.5);
                 this.height += (targetHeight - this.height) * dt * 3.0;
 
-                // 2. Rotazione attorno al perno controllata dalla levetta
+                // 2. Rotazione perno
                 let moveSpeed = 0.8 + (this.stickX * 2.0);
                 this.angle += moveSpeed * dt;
                 let x = Math.cos(this.angle) * this.radius;
                 let z = Math.sin(this.angle) * this.radius;
                 this.el.setAttribute('position', { x: x, y: this.height, z: z });
 
-                // Inclinazione del muso (tilt) quando si accelera
+                // 3. Tilt (Muso giù/su)
                 let rotationY = -this.angle * (180 / Math.PI) + 180;
                 if (this.modelEl) {
                     this.modelEl.setAttribute('rotation', { x: this.triggerValue * -12, y: rotationY, z: 0 });
                 }
 
-                // 3. Controllo elica principale
+                // 4. Elica proporzionale
                 if (this.rotorEl) {
                     if (this.triggerValue > 0.05) {
                         let speedDuration = Math.max(20, 300 - (this.triggerValue * 280));
@@ -82,56 +102,39 @@
         <!-- Perno centrale -->
         <a-cylinder position="0 0 0" radius="0.2" height="1.5" color="#FFCC00"></a-cylinder>
 
-        <!-- Bersagli lungo il percorso -->
-        <a-torus position="2.5 1.5 2.5" radius="0.5" radius-tubular="0.05" color="#00E676"></a-torus>
-        <a-torus position="-2.5 2 -2.5" radius="0.5" radius-tubular="0.05" color="#FFEA00"></a-torus>
-
-        <!-- Gruppo Elicottero & Braccio Meccanico -->
+        <!-- L'Elicottero -->
         <a-entity id="vertibird" vertibird-flight>
-            <!-- Braccio meccanico in cima al perno -->
             <a-entity position="0 0.75 0">
                 <a-box position="-1.5 0 0" width="3.0" height="0.03" depth="0.03" color="#FFCC00"></a-box>
                 
-                <!-- Modello dell'Elicottero Verde Militare -->
                 <a-entity id="heli-model" position="-3.0 0 0" rotation="0 90 0">
-                    
-                    <!-- 1. Cabina Principale -->
                     <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #388E3C; roughness: 0.3"></a-box>
-                    
-                    <!-- 2. Muso / Cabina di pilotaggio vetrata -->
-                    <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65; roughness: 0.1"></a-sphere>
-                    
-                    <!-- 3. Trave di coda -->
+                    <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65"></a-sphere>
                     <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #2E7D32"></a-cylinder>
-                    
-                    <!-- 4. Stabilizzatori di coda -->
                     <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #388E3C" rotation="0 0 -15"></a-box>
-                    
-                    <!-- 5. Pattini di atterraggio -->
                     <a-box position="-0.05 -0.37 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
                     <a-box position="-0.05 -0.37 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
 
-                    <!-- 6. Rotore Principale (fermo di default) -->
                     <a-entity position="0 0.24 0">
                         <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
                         <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
-                        <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" material="color: #111">
-                        </a-box>
+                        <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" material="color: #111"></a-box>
                     </a-entity>
-
-                    <!-- 7. Rotore di Coda -->
-                    <a-entity position="-1.28 0.05 -0.05" rotation="90 0 0">
-                        <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.07" material="color: #111">
-                        </a-box>
-                    </a-entity>
-                    
                 </a-entity>
             </a-entity>
         </a-entity>
 
-        <!-- Camera e Rig VR -->
+        <!-- Camera e Rig VR con i Controller Espliciti -->
         <a-entity id="rig" position="0 1.6 3">
             <a-camera></a-camera>
+            
+            <!-- Controller Destro fisico - Aggiunge un testo rosso galleggiante -->
+            <a-entity id="right-hand" oculus-touch-controls="hand: right" quest-input>
+                <a-text value="Cercando controller..." position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#FF3333" align="center"></a-text>
+            </a-entity>
+
+            <!-- Controller Sinistro fisico -->
+            <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
         </a-entity>
     </a-scene>
 </body>

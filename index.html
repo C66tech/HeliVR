@@ -2,10 +2,10 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Quest 3 Controls</title>
+    <title>VR Vertibird Simulator - Audio Test & Controls</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // Componente per la fisica e il controllo con i controller Quest 3
+        // Componente per la fisica, i controlli VR e il ronzio audio diagnostico
         AFRAME.register-component('vertibird-flight', {
             schema: { speed: { type: 'number', default: 1.5 } },
             init: function () {
@@ -18,18 +18,63 @@
                 this.triggerPressed = false;
                 this.stickX = 0;
 
-                // Riferimento al controller destro del Quest 3
-                this.rightController = document.querySelector('#right-hand');
-                if (this.rightController) {
-                    // Ascoltiamo la pressione del Grilletto (Trigger)
-                    this.rightController.addEventListener('triggerdown', () => { this.triggerPressed = true; });
-                    this.rightController.addEventListener('triggerup', () => { this.triggerPressed = false; });
+                // --- SISTEMA AUDIO (Web Audio API per il ronzio proporzionale) ---
+                this.audioCtx = null;
+                this.oscillator = null;
+                this.gainNode = null;
+                this.audioInitialized = false;
 
-                    // Ascoltiamo il movimento della levetta analogica (Thumbstick)
-                    this.rightController.addEventListener('thumbstickmoved', (evt) => {
-                        this.stickX = evt.detail.x; // Valore tra -1 (sinistra) e 1 (destra)
-                    });
-                }
+                // Inizializza l'audio al primo tocco o movimento per rispettare le regole dei browser su VR
+                const initAudio = () => {
+                    if (this.audioInitialized) return;
+                    try {
+                        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                        this.audioCtx = new AudioContext();
+                        
+                        this.oscillator = this.audioCtx.createOscillator();
+                        this.oscillator.type = 'sawtooth'; // Tono ronzante metallico/da motore
+                        this.oscillator.frequency.setValueAtTime(60, this.audioCtx.currentTime); // Frequenza minima
+
+                        this.gainNode = this.audioCtx.createGain();
+                        this.gainNode.gain.setValueAtTime(0.15, this.audioCtx.currentTime); // Volume moderato
+
+                        this.oscillator.connect(this.gainNode);
+                        this.gainNode.connect(this.audioCtx.destination);
+                        this.oscillator.start();
+                        
+                        this.audioInitialized = true;
+                        console.log("Audio avviato con successo!");
+                    } catch (e) {
+                        console.log("Errore avvio audio:", e);
+                    }
+                };
+
+                window.addEventListener('click', initAudio);
+                window.addEventListener('touchstart', initAudio);
+
+                // --- GESTIONE CONTROLLER QUEST 3 ---
+                this.bindController = () => {
+                    this.rightController = document.querySelector('#right-hand');
+                    if (this.rightController) {
+                        // Rimuovi eventuali listener doppi se già presenti
+                        this.rightController.addEventListener('triggerdown', () => { 
+                            this.triggerPressed = true; 
+                            initAudio();
+                        });
+                        this.rightController.addEventListener('triggerup', () => { 
+                            this.triggerPressed = false; 
+                        });
+
+                        this.rightController.addEventListener('thumbstickmoved', (evt) => {
+                            this.stickX = evt.detail.x; // Valore tra -1 e 1
+                            initAudio();
+                        });
+                        console.log("Controller destro agganciato correttamente!");
+                    }
+                };
+
+                // Ritardiamo leggermente il bind per dare tempo al sistema VR di caricare i controller
+                setTimeout(this.bindController, 1500);
 
                 this.modelEl = this.el.querySelector('#heli-model');
                 this.mainRotorEl = this.el.querySelector('#main-rotor');
@@ -37,20 +82,23 @@
             tick: function (time, delta) {
                 let dt = delta / 1000;
 
+                // Se il controller non era ancora pronto, riprova a cercarlo
+                if (!this.rightController) {
+                    this.bindController();
+                }
+
                 // 1. Gestione Gas (Throttle) con il Grilletto Destro
                 let targetThrottle = this.triggerPressed ? 1.0 : 0.0;
-                this.throttle += (targetThrottle - this.throttle) * dt * 4.0; // Inerzia fluida
+                this.throttle += (targetThrottle - this.throttle) * dt * 4.0;
 
                 // Altezza limitata legata al perno
                 this.height += (this.throttle * 2.5 - (this.height - 1.0) * 0.5) * dt;
                 this.height = Math.max(0.6, Math.min(this.height, 3.5));
 
-                // 2. Gestione Rotazione attorno al perno con la levetta (Orario / Antiorario)
-                // Usiamo la levetta X per accelerare/invertire la velocità di rivoluzione attorno al perno
+                // 2. Gestione Rotazione attorno al perno con la levetta
                 let targetSpeed = this.stickX * 3.0; 
                 this.dirSpeed += (targetSpeed - this.dirSpeed) * dt * 3.0;
                 
-                // Se la levetta è al centro, l'elicottero mantiene una velocità di crociera minima o si ferma
                 let actualMoveSpeed = Math.abs(this.stickX) > 0.05 ? this.dirSpeed : 0.5;
                 this.angle += actualMoveSpeed * dt;
 
@@ -58,25 +106,27 @@
                 let z = Math.sin(this.angle) * this.radius;
                 this.el.setAttribute('position', { x: x, y: this.height, z: z });
 
-                // 3. Orientamento e Tilt (Inclinazione muso avanti/indietro)
-                // Calcoliamo la direzione di marcia in base al verso di rotazione
+                // 3. Orientamento e Tilt
                 let movingForward = actualMoveSpeed >= 0;
-                let targetTiltX = movingForward ? -12 : 12; // Muso giù se avanti, muso su se indietro
-                
+                let targetTiltX = movingForward ? -12 : 12;
                 if (Math.abs(this.stickX) < 0.05) {
-                    targetTiltX = 0; // Raddrizza se fermo
+                    targetTiltX = 0;
                 }
 
-                // Rotazione Y per far puntare sempre l'elicottero lungo la circonferenza
                 let rotationY = -this.angle * (180 / Math.PI) + 180;
-                
-                // Applichiamo il tilt sull'asse X e la rotazione sul corpo
                 this.modelEl.setAttribute('rotation', { x: targetTiltX, y: rotationY, z: 0 });
                 
-                // 4. Velocità visiva dell'elica in base al grilletto
+                // 4. Velocità visiva dell'elica
                 if (this.mainRotorEl) {
                     let animDur = Math.max(20, 180 - (this.throttle * 150)); 
                     this.mainRotorEl.setAttribute('animation', `dur: ${animDur}`);
+                }
+
+                // --- AGGIORNAMENTO FREQUENZA RONZIO AUDIO ---
+                if (this.audioInitialized && this.oscillator && this.audioCtx) {
+                    // Frequenza proporzionale al gas (da 60Hz a 300Hz) + un accenno di movimento della levetta
+                    let targetFreq = 60 + (this.throttle * 200) + (Math.abs(this.stickX) * 40);
+                    this.oscillator.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.1);
                 }
             }
         });

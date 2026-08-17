@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - AR Passthrough Fixed</title>
+    <title>VR Vertibird Simulator - Grab, Rotate & Fine Scale</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -17,17 +17,18 @@
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
 
-                // Gestione dello Scale e del Drag del Diorama
+                // Gestione dello Scale e del Grab/Rotate 6DOF del Diorama
                 this.worldRoot = document.querySelector('#world-root');
                 this.currentScale = 1.0; 
                 this.isDragging = false;
-                this.grabOffset = new THREE.Vector3();
+                
+                this.initialControllerMatrixInv = new THREE.Matrix4();
+                this.initialWorldMatrix = new THREE.Matrix4();
                 
                 this.heliWrapperEl = document.querySelector('#heli-wrapper');
                 this.heliPitchEl = document.querySelector('#heli-pitch');
                 this.rotorEl = document.querySelector('#main-rotor');
                 this.tailRotorEl = document.querySelector('#tail-rotor');
-                this.debugText = document.querySelector('#debug-text');
                 this.rightHandEl = document.querySelector('#right-hand');
 
                 // --- SISTEMA AUDIO ---
@@ -65,22 +66,22 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // --- FUNZIONE DI SCALING DIRETTO SUL THREE.JS OBJECT3D ---
+                // --- FUNZIONE DI SCALING FINO A PASSI RIDOTTI ---
                 const applyScale = (delta) => {
-                    this.currentScale = Math.min(3.0, Math.max(0.2, this.currentScale + delta));
+                    this.currentScale = Math.min(3.0, Math.max(0.1, this.currentScale + delta));
                     if (this.worldRoot && this.worldRoot.object3D) {
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                         this.worldRoot.object3D.updateMatrixWorld(true);
                     }
                 };
 
-                // --- ASCOLTO TASTI A e B ---
+                // --- ASCOLTO TASTI A e B (Scaling Fine) ---
                 this.rightHandEl.addEventListener('abuttondown', () => {
-                    applyScale(-0.15); // Rimpicciolisce il plastico
+                    applyScale(-0.04); // Rimpicciolisce finemente
                 });
 
                 this.rightHandEl.addEventListener('bbuttondown', () => {
-                    applyScale(0.15);  // Ingrandisce il plastico
+                    applyScale(0.04);  // Ingrandisce finemente
                 });
             },
             tick: function (time, delta) {
@@ -90,7 +91,6 @@
                 let trigger = 0;
                 let grip = 0;
                 let stickY = 0;
-                let controllerActive = false;
                 let gp = null;
 
                 // --- 1. LETTURA INPUT ---
@@ -114,7 +114,6 @@
                 }
 
                 if (gp) {
-                    controllerActive = true;
                     trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
                     grip = gp.buttons[1] ? (gp.buttons[1].value || (gp.buttons[1].pressed ? 1 : 0)) : 0;
                     stickY = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
@@ -127,45 +126,42 @@
                 if (Math.abs(stickY) < 0.15) stickY = 0;
                 if (trigger < 0.02) trigger = 0;
 
-                // --- 2. LOGICA DI SPOSTAMENTO DIORAMA (GRIP) ---
-                if (this.rightHandEl && this.rightHandEl.object3D) {
+                // --- 2. LOGICA GRAB, MOVE & ROTATE DEL DIORAMA (GRIP / SECONDO GRILLETTO) ---
+                if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
                     let handObj = this.rightHandEl.object3D;
-                    let pos = new THREE.Vector3();
-                    let dir = new THREE.Vector3(0, 0, -1);
-                    handObj.getWorldPosition(pos);
-                    dir.applyQuaternion(handObj.getWorldQuaternion(new THREE.Quaternion()));
+                    
+                    if (grip > 0.5) {
+                        handObj.updateMatrixWorld(true);
+                        this.worldRoot.object3D.updateMatrixWorld(true);
 
-                    if (dir.y < 0) {
-                        let rayT = -pos.y / dir.y;
-                        let hitX = pos.x + rayT * dir.x;
-                        let hitZ = pos.z + rayT * dir.z;
-                        let hitPoint = new THREE.Vector3(hitX, 0, hitZ);
-
-                        if (grip > 0.5) {
-                            if (!this.isDragging) {
-                                this.isDragging = true;
-                                let rootPos = new THREE.Vector3();
-                                this.worldRoot.object3D.getWorldPosition(rootPos);
-                                this.grabOffset.copy(rootPos).sub(hitPoint);
-                            } else {
-                                let newWorldPos = hitPoint.clone().add(this.grabOffset);
-                                this.worldRoot.setAttribute('position', `${newWorldPos.x} ${newWorldPos.y} ${newWorldPos.z}`);
-                            }
+                        if (!this.isDragging) {
+                            this.isDragging = true;
+                            // Salva la matrice inversa del controller e la matrice iniziale del mondo
+                            this.initialControllerMatrixInv.copy(handObj.matrixWorld).invert();
+                            this.initialWorldMatrix.copy(this.worldRoot.object3D.matrixWorld);
                         } else {
-                            this.isDragging = false;
+                            // Calcola il delta di movimento e rotazione del controller e applicalo al diorama
+                            let currentControllerMatrix = handObj.matrixWorld;
+                            let deltaMatrix = currentControllerMatrix.clone().multiply(this.initialControllerMatrixInv);
+                            let targetMatrix = deltaMatrix.clone().multiply(this.initialWorldMatrix);
+
+                            let p = new THREE.Vector3();
+                            let q = new THREE.Quaternion();
+                            let s = new THREE.Vector3();
+                            targetMatrix.decompose(p, q, s);
+
+                            this.worldRoot.object3D.position.copy(p);
+                            this.worldRoot.object3D.quaternion.copy(q);
+                            this.worldRoot.object3D.updateMatrixWorld(true);
                         }
+                    } else {
+                        this.isDragging = false;
                     }
                 }
 
                 // --- 3. INERZIA ---
                 this.currentThrottle += (trigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (stickY - this.currentStickY) * dt * 6.0;
-
-                if (this.debugText) {
-                    this.debugText.setAttribute('value', controllerActive ? 
-                        `Gas: ${(this.currentThrottle*100).toFixed(0)}%\nScala: ${this.currentScale.toFixed(2)}x` : 
-                        "Sveglia Controller");
-                }
 
                 // --- 4. TURBOLENZE ---
                 let heightNoise = 0;
@@ -260,7 +256,7 @@
     </style>
 </head>
 <body>
-    <!-- Pulsante HTML aggiornato con enterAR() per attivare il Passthrough -->
+    <!-- Pulsante HTML per avviare la sessione Immersive AR (Passthrough) -->
     <div id="ar-button-container">
         <button class="custom-ar-btn" onclick="document.querySelector('a-scene').enterAR()">ENTRA IN AR (PASSTHROUGH)</button>
     </div>
@@ -269,8 +265,8 @@
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- CONTENITORE GLOBALE DEL DIORAMA -->
-        <a-entity id="world-root" position="0 0 0" scale="1 1 1">
+        <!-- CONTENITORE GLOBALE DEL DIORAMA (Spostabile, Ruotabile e Scalabile) -->
+        <a-entity id="world-root" position="0 0 0" rotation="0 0 0" scale="1 1 1">
             
             <!-- Pavimentazione -->
             <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="color: #2b2b2b; opacity: 0.9"></a-box>
@@ -327,9 +323,8 @@
         <a-entity id="rig" position="0 0 7.5">
             <a-camera position="0 1.5 0"></a-camera>
             
-            <a-entity id="right-hand" oculus-touch-controls="hand: right">
-                <a-text id="debug-text" value="Pronto" position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#00FF66" align="center"></a-text>
-            </a-entity>
+            <!-- Controller Destro con tasti A/B (Scala Fine) e Grip (Afferra e Ruota/Sposta) -->
+            <a-entity id="right-hand" oculus-touch-controls="hand: right"></a-entity>
             <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
         </a-entity>
     </a-scene>

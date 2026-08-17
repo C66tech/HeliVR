@@ -1,0 +1,151 @@
+ù<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>VR Vertibird Simulator - Keyboard & VR Controls</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script>
+        // Componente per la fisica, il controllo VR e tastiera del volo
+        AFRAME.register-component('vertibird-flight', {
+            schema: { speed: { type: 'number', default: 1.5 } },
+            init: function () {
+                this.angle = 0;
+                this.height = 1.0;
+                this.radius = 3.0;
+                this.throttle = 0;
+                
+                // Gestione Controller VR (Quest 3)
+                this.rightController = document.querySelector('#right-hand');
+                if (this.rightController) {
+                    this.rightController.addEventListener('thumbstickmoved', (evt) => {
+                        // Se usiamo il thumbstick, ignoriamo parzialmente la tastiera o sommiamo i comandi
+                        this.vrThrottle = -evt.detail.y;
+                    });
+                }
+
+                // Gestione Tastiera PC
+                this.keyThrottle = 0;
+                window.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space' || e.code === 'ArrowUp') {
+                        this.keyThrottle = 1.0; // Accelera / Alza
+                        e.preventDefault(); // Evita lo scrolling della pagina con la barra spaziatrice
+                    } else if (e.code === 'ArrowDown') {
+                        this.keyThrottle = -1.0; // Scendi
+                        e.preventDefault();
+                    }
+                });
+
+                window.addEventListener('keyup', (e) => {
+                    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                        this.keyThrottle = 0.0; // Rilasciando torna a zero
+                    }
+                });
+
+                this.modelEl = this.el.querySelector('#heli-model');
+                this.mainRotorEl = this.el.querySelector('#main-rotor');
+            },
+            tick: function (time, delta) {
+                let dt = delta / 1000;
+
+                // Combina il comando della tastiera con quello del Quest 3 (prende il massimo attivo)
+                let activeThrottle = this.keyThrottle !== 0 ? this.keyThrottle : (this.vrThrottle || 0);
+                
+                // Ritorno graduale al neutro se non si preme nulla
+                this.throttle += (activeThrottle - this.throttle) * dt * 5.0;
+
+                this.height += this.throttle * dt * 2.0;
+                this.height = Math.max(0.5, Math.min(this.height, 3.5));
+                this.angle += this.data.speed * dt;
+
+                let x = Math.cos(this.angle) * this.radius;
+                let z = Math.sin(this.angle) * this.radius;
+
+                this.el.setAttribute('position', { x: x, y: this.height, z: z });
+
+                let rotationY = -this.angle * (180 / Math.PI) + 180;
+                
+                this.modelEl.setAttribute('rotation', { x: this.throttle * 15, y: rotationY, z: 0 });
+                
+                if (this.mainRotorEl) {
+                    let animDur = Math.max(20, 180 - (this.throttle * 120)); 
+                    this.mainRotorEl.setAttribute('animation', `dur: ${animDur}`);
+                }
+            }
+        });
+    </script>
+</head>
+<body>
+    <a-scene xr-mode-ui="enabled: true">
+        <!-- Illuminazione -->
+        <a-light type="ambient" color="#DDD" intensity="0.7"></a-light>
+        <a-light type="directional" color="#FFF" intensity="0.9" position="-1 3 1"></a-light>
+
+        <!-- Pavimentazione / Tavolo di gioco -->
+        <a-box position="0 -0.5 0" width="10" height="1" depth="10" material="color: #2b2b2b"></a-box>
+        
+        <!-- Perno centrale del Vertibird -->
+        <a-cylinder position="0 0 0" radius="0.2" height="1.5" color="#FFCC00"></a-cylinder>
+
+        <!-- Gruppo Elicottero & Braccio Meccanico -->
+        <a-entity id="vertibird" vertibird-flight>
+            <!-- Braccio meccanico in cima al perno -->
+            <a-entity position="0 0.75 0">
+                <a-box position="-1.5 0 0" width="3.0" height="0.03" depth="0.03" color="#FFCC00"></a-box>
+                
+                <!-- Modello dell'Elicottero -->
+                <a-entity id="heli-model" position="-3.0 0 0" rotation="0 90 0">
+                    
+                    <!-- 1. Cabina Principale -->
+                    <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #D32F2F; roughness: 0.3"></a-box>
+                    
+                    <!-- 2. Muso / Cabina di pilotaggio vetrata -->
+                    <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65; roughness: 0.1"></a-sphere>
+                    
+                    <!-- 3. Trave di coda -->
+                    <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #B71C1C"></a-cylinder>
+                    
+                    <!-- 4. Stabilizzatori di coda -->
+                    <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #D32F2F" rotation="0 0 -15"></a-box>
+                    <a-box position="-1.22 0.05 0.1" width="0.04" height="0.08" depth="0.3" material="color: #D32F2F"></a-box>
+                    
+                    <!-- 5. Pattini di atterraggio -->
+                    <a-cylinder position="0.2 -0.28 -0.2" radius="0.015" height="0.18" material="color: #333"></a-cylinder>
+                    <a-cylinder position="0.2 -0.28 0.2" radius="0.015" height="0.18" material="color: #333"></a-cylinder>
+                    <a-cylinder position="-0.3 -0.28 -0.2" radius="0.015" height="0.18" material="color: #333"></a-cylinder>
+                    <a-cylinder position="-0.3 -0.28 0.2" radius="0.015" height="0.18" material="color: #333"></a-cylinder>
+                    <a-box position="-0.05 -0.37 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
+                    <a-box position="-0.05 -0.37 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
+
+                    <!-- 6. Rotore Principale -->
+                    <a-entity position="0 0.24 0">
+                        <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
+                        <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
+                        <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" material="color: #111"
+                               animation="property: rotation; to: 0 360 0; loop: true; dur: 200; easing: linear">
+                        </a-box>
+                    </a-entity>
+
+                    <!-- 7. Rotore di Coda -->
+                    <a-entity position="-1.28 0.05 -0.05" rotation="90 0 0">
+                        <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.07" material="color: #111"
+                               animation="property: rotation; to: 0 360 0; loop: true; dur: 50; easing: linear">
+                        </a-box>
+                    </a-entity>
+                    
+                </a-entity>
+            </a-entity>
+        </a-entity>
+
+        <!-- Bersagli lungo il percorso -->
+        <a-torus position="2.5 1.5 2.5" radius="0.5" radius-tubular="0.05" color="#00E676"></a-torus>
+        <a-torus position="-2.5 2 -2.5" radius="0.5" radius-tubular="0.05" color="#FFEA00"></a-torus>
+
+        <!-- Camera e Controller Quest 3 -->
+        <a-entity id="rig" position="0 1.6 3">
+            <a-camera></a-camera>
+            <a-entity id="right-hand" oculus-touch-controls="hand: right"></a-entity>
+            <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
+        </a-entity>
+    </a-scene>
+</body>
+</html>

@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Fast & Realistic Flight</title>
+    <title>VR Vertibird Simulator - Custom Schematic Model</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -11,11 +11,11 @@
                 this.heliY = 0.25;     
                 this.radius = 4.5;     
                 
-                // Variabili di inerzia
+                // Inerzia
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
 
-                // Angoli di rotazione pale
+                // Rotazione pale
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
                 
@@ -99,7 +99,7 @@
                 if (Math.abs(stickY) < 0.15) stickY = 0;
                 if (trigger < 0.02) trigger = 0;
 
-                // --- 2. INERZIA E SMOOTHING ---
+                // --- 2. INERZIA ---
                 this.currentThrottle += (trigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (stickY - this.currentStickY) * dt * 6.0;
 
@@ -109,7 +109,7 @@
                         "Sveglia Controller");
                 }
 
-                // --- 3. TURBOLENZE (Leggere fluttuazioni) ---
+                // --- 3. TURBOLENZE ---
                 let heightNoise = 0;
                 let pitchNoise = 0;
                 
@@ -133,7 +133,7 @@
                 let hingeAngleRad = Math.asin((this.heliY - 1.1) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
 
-                // --- 5. ASSETTO DEL MUSO (Pitch) ---
+                // --- 5. ASSETTO DEL MUSO ---
                 let speedFactor = this.currentStickY; 
                 let pitchAngle = (speedFactor * 15.0) + pitchNoise; 
                 
@@ -145,16 +145,15 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 6. MOTO CIRCOLARE (Velocità ripristinata e reattiva) ---
+                // --- 6. MOTO CIRCOLARE ---
                 if (this.heliY > 0.255) {
-                    // Moltiplicatore di velocità angolare adeguato al raggio di 4.5m
                     let angularSpeed = -speedFactor * this.currentThrottle * 90.0; 
                     this.angle += angularSpeed * dt;
                 }
 
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // --- 7. ROTAZIONE DELLE PALE ---
+                // --- 7. ROTAZIONE PALE ---
                 if (this.currentThrottle > 0.01) {
                     let rotSpeed = this.currentThrottle * 4000; 
                     this.rotorAngle += rotSpeed * dt;
@@ -168,7 +167,7 @@
                     }
                 }
 
-                // --- 8. AGGIORNAMENTO AUDIO ---
+                // --- 8. AUDIO ---
                 if (this.audioInitialized && this.oscillator && this.gainNode && this.audioCtx) {
                     let targetFreq = 30 + (this.currentThrottle * 70);
                     let targetVolume = this.currentThrottle > 0.01 ? 0.18 : 0.0;
@@ -184,44 +183,52 @@
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- Pavimentazione / Piano d'atterraggio -->
+        <!-- Pavimentazione -->
         <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="color: #2b2b2b"></a-box>
         
-        <!-- Perno Centrale (Cono, altezza totale 1.2m) -->
+        <!-- Perno Centrale a Cono -->
         <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
 
-        <!-- CERNIERA E ASTA DEL VERTIBIRD (Cerniera a Y = 1.1m) -->
+        <!-- VERTIBIRD -->
         <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
             
-            <!-- Asta Meccanica Allungata (Raggio 4.5m) -->
+            <!-- Asta Meccanica -->
             <a-box id="rod" position="2.25 0 0" width="4.5" height="0.02" depth="0.02" color="#FFCC00"></a-box>
             
             <!-- Wrapper Elicottero -->
             <a-entity id="heli-wrapper" position="4.5 0 0">
-                
                 <a-entity id="heli-yaw" rotation="0 90 0">
                     <a-entity id="heli-pitch" rotation="0 0 0">
                         
-                        <!-- Modello Elicottero -->
-                        <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #388E3C; roughness: 0.3"></a-box>
-                        <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65"></a-sphere>
-                        <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #2E7D32"></a-cylinder>
-                        <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #388E3C" rotation="0 0 -15"></a-box>
-                        
-                        <!-- Pattini d'atterraggio ROSSI -->
-                        <a-box position="-0.05 -0.25 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #D32F2F"></a-box>
-                        <a-box position="-0.05 -0.25 0.22" width="0.75" height="0.025" depth="0.035" material="color: #D32F2F"></a-box>
+                        <!-- ========================================== -->
+                        <!-- MODELLO GEOMETRICO BASATO SUL TUO DISEGNO -->
+                        <!-- ========================================== -->
 
-                        <!-- Rotore Principale -->
-                        <a-entity position="0 0.24 0">
-                            <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
-                            <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
-                            <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
+                        <!-- 1. Cabina Principale (Sfera Rossa) -->
+                        <a-sphere position="0 0 0" radius="0.35" material="color: #E53935; roughness: 0.3"></a-sphere>
+
+                        <!-- 2. Struttura di Coda (Cono Verde) -->
+                        <a-cone position="-0.9 0.05 0" radius-bottom="0.22" radius-top="0.08" height="1.4" rotation="0 0 90" material="color: #43A047"></a-cone>
+
+                        <!-- 3. Rotore di Coda (Piramide/Triangolo Viola) -->
+                        <a-entity position="-1.65 0.12 0" rotation="0 0 -90">
+                            <a-cone radius-bottom="0.18" height="0.25" segments-radial="3" material="color: #8E24AA"></a-cone>
+                            <a-box id="tail-rotor" width="0.4" height="0.015" depth="0.08" color="#FFEB3B" rotation="90 0 0"></a-box>
                         </a-entity>
 
-                        <!-- Rotore di Coda -->
-                        <a-entity position="-1.28 0.05 -0.05" rotation="90 0 0">
-                            <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.07" color="#FFEB3B"></a-box>
+                        <!-- 4. Pattini e Carrello (Viola) -->
+                        <a-box position="0.1 -0.3 -0.22" width="0.7" height="0.025" depth="0.03" material="color: #8E24AA"></a-box>
+                        <a-box position="0.1 -0.3 0.22" width="0.7" height="0.025" depth="0.03" material="color: #8E24AA"></a-box>
+                        <a-box position="0.15 -0.16 -0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 15" material="color: #8E24AA"></a-box>
+                        <a-box position="-0.15 -0.16 -0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 -15" material="color: #8E24AA"></a-box>
+                        <a-box position="0.15 -0.16 0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 15" material="color: #8E24AA"></a-box>
+                        <a-box position="-0.15 -0.16 0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 -15" material="color: #8E24AA"></a-box>
+
+                        <!-- 5. Rotore Principale (Albero e Pale Gialle) -->
+                        <a-entity position="0 0.35 0">
+                            <a-cylinder radius="0.04" height="0.15" material="color: #8E24AA"></a-cylinder>
+                            <a-sphere position="0 0.08 0" radius="0.07" material="color: #FFCC00"></a-sphere>
+                            <a-box id="main-rotor" position="0 0.12 0" width="3.0" height="0.012" depth="0.12" color="#FFEB3B"></a-box>
                         </a-entity>
 
                     </a-entity>

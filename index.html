@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird - WebXR + XInput Gamepad Support</title>
+    <title>VR Vertibird - Fixed Startup & Input</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.register-component('vertibird-flight', {
@@ -13,9 +13,15 @@
                 this.triggerValue = 0;
                 this.stickX = 0;
                 
-                this.rotorEl = document.querySelector('#main-rotor');
+                // Riferimenti diretti agli elementi interni
+                this.rotorEl = this.el.querySelector('#main-rotor');
                 this.modelEl = this.el.querySelector('#heli-model');
                 this.debugText = document.querySelector('#status-text');
+                
+                // Flag per verificare se l'interfaccia si è aggiornata
+                if (this.debugText) {
+                    this.debugText.setAttribute('value', 'Sistema Pronto.\nPremi Grilletto o XInput.');
+                }
             },
             tick: function (time, delta) {
                 let dt = delta / 1000;
@@ -25,7 +31,7 @@
                 let infoString = "Modo: " + (xrSession ? "VR Immersive" : "Desktop / 2D") + "\n";
                 let inputDetected = false;
 
-                // 1. Lettura da Controller WebXR (Meta Quest 3 in VR)
+                // 1. Lettura da Controller WebXR (Meta Quest 3)
                 if (xrSession && xrSession.inputSources) {
                     for (let source of xrSession.inputSources) {
                         if (source.gamepad && (source.handedness === 'right' || !source.handedness)) {
@@ -45,19 +51,13 @@
                     }
                 }
 
-                // 2. Lettura da Controller XInput (es. Gamepad Xbox / Standard PC collegato via USB o Bluetooth)
+                // 2. Lettura da Controller XInput / Gamepad Standard (PC / Browser)
                 if (!inputDetected) {
                     let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
                     for (let i = 0; i < gamepads.length; i++) {
                         let gp = gamepads[i];
-                        // Rileva gamepad standard o XInput collegati al PC/Visore
                         if (gp && gp.connected) {
-                            // Su XInput standard (es. Xbox Controller):
-                            // - Tasto RT (grilletto destro) spesso corrisponde al bottone 7 o 2/3, oppure asse 5. Usiamo il bottone 7 o il grilletto analogico se disponibile.
-                            // - Levetta sinistra/destra asse 0 (Stick sinistro X) o asse 2 (Stick destro X).
-                            
                             let trigVal = 0;
-                            // Se il gamepad ha pulsanti analogici avanzati (es. grilletti Xbox)
                             if (gp.buttons.length > 7 && typeof gp.buttons[7].value === 'number') {
                                 trigVal = gp.buttons[7].value; // RT su Xbox
                             } else if (gp.buttons[0]) {
@@ -69,7 +69,7 @@
                             if (trigVal > 0.05 || Math.abs(stickVal) > 0.05 || i === 0) {
                                 this.triggerValue = trigVal;
                                 this.stickX = stickVal;
-                                infoString += `XInput: ${gp.id.substring(0, 15)}\nRT/TRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
+                                infoString += `XInput: ${gp.id.substring(0, 12)}\nRT/TRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
                                 inputDetected = true;
                                 break;
                             }
@@ -78,11 +78,12 @@
                 }
 
                 if (!inputDetected) {
-                    infoString += "Nessun comando attivo.\nPremi grilletto o usa XInput.";
+                    infoString += "Nessun comando attivo.\nPremi grilletto o stick.";
                     this.triggerValue = 0;
                     this.stickX = 0;
                 }
 
+                // Aggiornamento sicuro del testo di debug
                 if (this.debugText) {
                     this.debugText.setAttribute('value', infoString);
                 }
@@ -102,6 +103,7 @@
                     this.modelEl.setAttribute('rotation', { x: this.triggerValue * -12, y: rotationY, z: 0 });
                 }
 
+                // Controllo elica
                 if (this.rotorEl) {
                     if (this.triggerValue > 0.05) {
                         let speedDuration = Math.max(20, 300 - (this.triggerValue * 280));
@@ -126,11 +128,11 @@
         <!-- Pannello HUD di diagnostica -->
         <a-entity position="0 1.8 -2">
             <a-plane width="2.8" height="1.2" color="#000000" opacity="0.85"></a-plane>
-            <a-text id="status-text" value="In attesa di input..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
+            <a-text id="status-text" value="Caricamento..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
         </a-entity>
 
-        <!-- Elicottero -->
-        <a-entity id="vertibird" vertibird-flight>
+        <!-- Elicottero con componente allegato -->
+        <a-entity vertibird-flight>
             <a-entity position="0 0.75 0">
                 <a-box position="-1.5 0 0" width="3.0" height="0.03" depth="0.03" color="#FFCC00"></a-box>
                 

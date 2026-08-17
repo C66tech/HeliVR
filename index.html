@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird - Controller Diagnostics</title>
+    <title>VR Vertibird - WebXR Native InputSources</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.register-component('vertibird-flight', {
@@ -19,42 +19,56 @@
             },
             tick: function (time, delta) {
                 let dt = delta / 1000;
+                let sceneEl = this.el.sceneEl;
+                let xrSession = sceneEl.renderer ? sceneEl.renderer.xr.getSession() : null;
 
-                // Scansione aggressiva di tutti i gamepad connessi (WebXR / Browser)
-                let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-                let activeGp = null;
-                let infoString = "Cerca controller...\n";
+                let infoString = "XR Session: " + (xrSession ? "ATTIVA" : "NON ATTIVA") + "\n";
+                let controllerFound = false;
 
-                for (let i = 0; i < gamepads.length; i++) {
-                    let gp = gamepads[i];
-                    if (gp) {
-                        infoString += `[${i}] ${gp.id.substring(0, 15)} (B:${gp.buttons.length} A:${gp.axes.length})\n`;
-                        // Cerca il controller destro o il primo disponibile
-                        if (gp.hand === 'right' || gp.id.toLowerCase().includes('right') || gp.id.toLowerCase().includes('oculus') || gp.id.toLowerCase().includes('meta') || i === 0) {
-                            activeGp = gp;
+                // Approccio nativo WebXR tramite session.inputSources
+                if (xrSession && xrSession.inputSources) {
+                    for (let source of xrSession.inputSources) {
+                        // Cerchiamo la mano destra (o il gamepad disponibile se handedness non è definito)
+                        if (source.gamepad && (source.handedness === 'right' || !source.handedness)) {
+                            let gp = source.gamepad;
+                            controllerFound = true;
+
+                            // Grilletto (di solito il bottone 0)
+                            if (gp.buttons && gp.buttons.length > 0) {
+                                this.triggerValue = gp.buttons[0].value;
+                            }
+                            // Levetta X (di solito l'asse 2 o 0)
+                            if (gp.axes && gp.axes.length > 2) {
+                                this.stickX = gp.axes[2];
+                            } else if (gp.axes && gp.axes.length > 0) {
+                                this.stickX = gp.axes[0];
+                            }
+
+                            infoString += `Hand: ${source.handedness}\nTRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
+                            break;
                         }
                     }
                 }
 
-                if (activeGp) {
-                    // Legge il grilletto (di solito bottone 0 o 1)
-                    if (activeGp.buttons[0]) {
-                        this.triggerValue = activeGp.buttons[0].value;
+                if (!controllerFound) {
+                    // Fallback sulla Gamepad API standard se la sessione XR non ha ancora esposto le sources
+                    let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+                    for (let gp of gamepads) {
+                        if (gp && gp.buttons && gp.buttons.length > 0) {
+                            this.triggerValue = gp.buttons[0].value;
+                            if (gp.axes && gp.axes.length > 2) this.stickX = gp.axes[2];
+                            infoString += `Fallback GP: ${gp.id.substring(0, 10)}\nTRIG: ${this.triggerValue.toFixed(2)}`;
+                            controllerFound = true;
+                            break;
+                        }
                     }
-                    // Legge la levetta X (di solito asse 2 o 0)
-                    if (activeGp.axes.length > 2) {
-                        this.stickX = activeGp.axes[2];
-                    } else if (activeGp.axes.length > 0) {
-                        this.stickX = activeGp.axes[0];
+                    if (!controllerFound) {
+                        infoString += "Entra in VR (premi tasto VR)";
+                        this.triggerValue = 0;
+                        this.stickX = 0;
                     }
-
-                    infoString += `TRIG: ${this.triggerValue.toFixed(2)} | STICK: ${this.stickX.toFixed(2)}`;
-                } else {
-                    infoString += "Nessun gamepad rilevato!";
-                    this.triggerValue = 0;
                 }
 
-                // Aggiorna il testo del pannello nel visore
                 if (this.debugText) {
                     this.debugText.setAttribute('value', infoString);
                 }
@@ -63,7 +77,7 @@
                 let targetHeight = 0.6 + (this.triggerValue * 2.5);
                 this.height += (targetHeight - this.height) * dt * 3.0;
 
-                // 2. Rotazione continua o controllata dalla levetta
+                // 2. Rotazione attorno al perno controllata dalla levetta o fissa
                 let moveSpeed = 0.8 + (this.stickX * 2.0);
                 this.angle += moveSpeed * dt;
                 let x = Math.cos(this.angle) * this.radius;
@@ -76,7 +90,7 @@
                     this.modelEl.setAttribute('rotation', { x: this.triggerValue * -12, y: rotationY, z: 0 });
                 }
 
-                // 3. Controllo elica
+                // 3. Controllo elica (ferma se grilletto a 0, gira se premuto)
                 if (this.rotorEl) {
                     if (this.triggerValue > 0.05) {
                         let speedDuration = Math.max(20, 300 - (this.triggerValue * 280));
@@ -92,23 +106,19 @@
 </head>
 <body>
     <a-scene xr-mode-ui="enabled: true">
-        <!-- Illuminazione -->
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- Pavimento -->
         <a-box position="0 -0.5 0" width="10" height="1" depth="10" material="color: #2b2b2b"></a-box>
-        
-        <!-- Perno centrale -->
         <a-cylinder position="0 0 0" radius="0.2" height="1.5" color="#FFCC00"></a-cylinder>
 
-        <!-- Pannello di diagnostica 3D fluttuante davanti a te -->
+        <!-- Pannello HUD di diagnostica 3D -->
         <a-entity position="0 1.8 -2">
             <a-plane width="2.5" height="1.2" color="#000000" opacity="0.85"></a-plane>
-            <a-text id="status-text" value="Avvio diagnostica..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
+            <a-text id="status-text" value="Avvio..." position="0 0 0.01" align="center" color="#00FF00" width="3.5" font="monoid"></a-text>
         </a-entity>
 
-        <!-- Elicottero Verde -->
+        <!-- Elicottero -->
         <a-entity id="vertibird" vertibird-flight>
             <a-entity position="0 0.75 0">
                 <a-box position="-1.5 0 0" width="3.0" height="0.03" depth="0.03" color="#FFCC00"></a-box>
@@ -131,11 +141,8 @@
             </a-entity>
         </a-entity>
 
-        <!-- Camera e Controller -->
         <a-entity id="rig" position="0 1.6 3">
             <a-camera></a-camera>
-            <a-entity id="right-hand" oculus-touch-controls="hand: right"></a-entity>
-            <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
         </a-entity>
     </a-scene>
 </body>

@@ -1,11 +1,11 @@
-ù<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Keyboard & VR Controls</title>
+    <title>VR Vertibird Simulator - Quest 3 Controls</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // Componente per la fisica, il controllo VR e tastiera del volo
+        // Componente per la fisica e il controllo con i controller Quest 3
         AFRAME.register-component('vertibird-flight', {
             schema: { speed: { type: 'number', default: 1.5 } },
             init: function () {
@@ -13,33 +13,23 @@
                 this.height = 1.0;
                 this.radius = 3.0;
                 this.throttle = 0;
+                this.dirSpeed = this.data.speed;
                 
-                // Gestione Controller VR (Quest 3)
+                this.triggerPressed = false;
+                this.stickX = 0;
+
+                // Riferimento al controller destro del Quest 3
                 this.rightController = document.querySelector('#right-hand');
                 if (this.rightController) {
+                    // Ascoltiamo la pressione del Grilletto (Trigger)
+                    this.rightController.addEventListener('triggerdown', () => { this.triggerPressed = true; });
+                    this.rightController.addEventListener('triggerup', () => { this.triggerPressed = false; });
+
+                    // Ascoltiamo il movimento della levetta analogica (Thumbstick)
                     this.rightController.addEventListener('thumbstickmoved', (evt) => {
-                        // Se usiamo il thumbstick, ignoriamo parzialmente la tastiera o sommiamo i comandi
-                        this.vrThrottle = -evt.detail.y;
+                        this.stickX = evt.detail.x; // Valore tra -1 (sinistra) e 1 (destra)
                     });
                 }
-
-                // Gestione Tastiera PC
-                this.keyThrottle = 0;
-                window.addEventListener('keydown', (e) => {
-                    if (e.code === 'Space' || e.code === 'ArrowUp') {
-                        this.keyThrottle = 1.0; // Accelera / Alza
-                        e.preventDefault(); // Evita lo scrolling della pagina con la barra spaziatrice
-                    } else if (e.code === 'ArrowDown') {
-                        this.keyThrottle = -1.0; // Scendi
-                        e.preventDefault();
-                    }
-                });
-
-                window.addEventListener('keyup', (e) => {
-                    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
-                        this.keyThrottle = 0.0; // Rilasciando torna a zero
-                    }
-                });
 
                 this.modelEl = this.el.querySelector('#heli-model');
                 this.mainRotorEl = this.el.querySelector('#main-rotor');
@@ -47,27 +37,45 @@
             tick: function (time, delta) {
                 let dt = delta / 1000;
 
-                // Combina il comando della tastiera con quello del Quest 3 (prende il massimo attivo)
-                let activeThrottle = this.keyThrottle !== 0 ? this.keyThrottle : (this.vrThrottle || 0);
-                
-                // Ritorno graduale al neutro se non si preme nulla
-                this.throttle += (activeThrottle - this.throttle) * dt * 5.0;
+                // 1. Gestione Gas (Throttle) con il Grilletto Destro
+                let targetThrottle = this.triggerPressed ? 1.0 : 0.0;
+                this.throttle += (targetThrottle - this.throttle) * dt * 4.0; // Inerzia fluida
 
-                this.height += this.throttle * dt * 2.0;
-                this.height = Math.max(0.5, Math.min(this.height, 3.5));
-                this.angle += this.data.speed * dt;
+                // Altezza limitata legata al perno
+                this.height += (this.throttle * 2.5 - (this.height - 1.0) * 0.5) * dt;
+                this.height = Math.max(0.6, Math.min(this.height, 3.5));
+
+                // 2. Gestione Rotazione attorno al perno con la levetta (Orario / Antiorario)
+                // Usiamo la levetta X per accelerare/invertire la velocità di rivoluzione attorno al perno
+                let targetSpeed = this.stickX * 3.0; 
+                this.dirSpeed += (targetSpeed - this.dirSpeed) * dt * 3.0;
+                
+                // Se la levetta è al centro, l'elicottero mantiene una velocità di crociera minima o si ferma
+                let actualMoveSpeed = Math.abs(this.stickX) > 0.05 ? this.dirSpeed : 0.5;
+                this.angle += actualMoveSpeed * dt;
 
                 let x = Math.cos(this.angle) * this.radius;
                 let z = Math.sin(this.angle) * this.radius;
-
                 this.el.setAttribute('position', { x: x, y: this.height, z: z });
 
+                // 3. Orientamento e Tilt (Inclinazione muso avanti/indietro)
+                // Calcoliamo la direzione di marcia in base al verso di rotazione
+                let movingForward = actualMoveSpeed >= 0;
+                let targetTiltX = movingForward ? -12 : 12; // Muso giù se avanti, muso su se indietro
+                
+                if (Math.abs(this.stickX) < 0.05) {
+                    targetTiltX = 0; // Raddrizza se fermo
+                }
+
+                // Rotazione Y per far puntare sempre l'elicottero lungo la circonferenza
                 let rotationY = -this.angle * (180 / Math.PI) + 180;
                 
-                this.modelEl.setAttribute('rotation', { x: this.throttle * 15, y: rotationY, z: 0 });
+                // Applichiamo il tilt sull'asse X e la rotazione sul corpo
+                this.modelEl.setAttribute('rotation', { x: targetTiltX, y: rotationY, z: 0 });
                 
+                // 4. Velocità visiva dell'elica in base al grilletto
                 if (this.mainRotorEl) {
-                    let animDur = Math.max(20, 180 - (this.throttle * 120)); 
+                    let animDur = Math.max(20, 180 - (this.throttle * 150)); 
                     this.mainRotorEl.setAttribute('animation', `dur: ${animDur}`);
                 }
             }

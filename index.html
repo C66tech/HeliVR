@@ -2,10 +2,10 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Audio Test & Controls</title>
+    <title>VR Vertibird Simulator - Controller Debug HUD</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // Componente per la fisica, i controlli VR e il ronzio audio diagnostico
+        // Componente per la fisica e il debug visivo dei controller
         AFRAME.register-component('vertibird-flight', {
             schema: { speed: { type: 'number', default: 1.5 } },
             init: function () {
@@ -15,66 +15,38 @@
                 this.throttle = 0;
                 this.dirSpeed = this.data.speed;
                 
-                this.triggerPressed = false;
+                this.triggerValue = 0;
                 this.stickX = 0;
+                this.controllerConnected = false;
 
-                // --- SISTEMA AUDIO (Web Audio API per il ronzio proporzionale) ---
+                // Riferimenti agli elementi visivi del pannello di debug
+                this.debugTextEl = document.querySelector('#debug-text');
+
+                // Gestione Audio (si sblocca al primo tocco)
                 this.audioCtx = null;
                 this.oscillator = null;
                 this.gainNode = null;
                 this.audioInitialized = false;
 
-                // Inizializza l'audio al primo tocco o movimento per rispettare le regole dei browser su VR
                 const initAudio = () => {
                     if (this.audioInitialized) return;
                     try {
                         window.AudioContext = window.AudioContext || window.webkitAudioContext;
                         this.audioCtx = new AudioContext();
-                        
                         this.oscillator = this.audioCtx.createOscillator();
-                        this.oscillator.type = 'sawtooth'; // Tono ronzante metallico/da motore
-                        this.oscillator.frequency.setValueAtTime(60, this.audioCtx.currentTime); // Frequenza minima
-
+                        this.oscillator.type = 'sawtooth';
+                        this.oscillator.frequency.setValueAtTime(60, this.audioCtx.currentTime);
                         this.gainNode = this.audioCtx.createGain();
-                        this.gainNode.gain.setValueAtTime(0.15, this.audioCtx.currentTime); // Volume moderato
-
+                        this.gainNode.gain.setValueAtTime(0.15, this.audioCtx.currentTime);
                         this.oscillator.connect(this.gainNode);
                         this.gainNode.connect(this.audioCtx.destination);
                         this.oscillator.start();
-                        
                         this.audioInitialized = true;
-                        console.log("Audio avviato con successo!");
-                    } catch (e) {
-                        console.log("Errore avvio audio:", e);
-                    }
+                    } catch (e) {}
                 };
 
                 window.addEventListener('click', initAudio);
                 window.addEventListener('touchstart', initAudio);
-
-                // --- GESTIONE CONTROLLER QUEST 3 ---
-                this.bindController = () => {
-                    this.rightController = document.querySelector('#right-hand');
-                    if (this.rightController) {
-                        // Rimuovi eventuali listener doppi se già presenti
-                        this.rightController.addEventListener('triggerdown', () => { 
-                            this.triggerPressed = true; 
-                            initAudio();
-                        });
-                        this.rightController.addEventListener('triggerup', () => { 
-                            this.triggerPressed = false; 
-                        });
-
-                        this.rightController.addEventListener('thumbstickmoved', (evt) => {
-                            this.stickX = evt.detail.x; // Valore tra -1 e 1
-                            initAudio();
-                        });
-                        console.log("Controller destro agganciato correttamente!");
-                    }
-                };
-
-                // Ritardiamo leggermente il bind per dare tempo al sistema VR di caricare i controller
-                setTimeout(this.bindController, 1500);
 
                 this.modelEl = this.el.querySelector('#heli-model');
                 this.mainRotorEl = this.el.querySelector('#main-rotor');
@@ -82,16 +54,61 @@
             tick: function (time, delta) {
                 let dt = delta / 1000;
 
-                // Se il controller non era ancora pronto, riprova a cercarlo
-                if (!this.rightController) {
-                    this.bindController();
+                // --- LETTURA DIRETTA DELLO STATO DELLA GAMEPAD API (Standard WebXR / Quest) ---
+                // Questo è il modo più affidabile in A-Frame/WebXR per leggere i controller senza perdersi eventi
+                let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+                let rightGamepad = null;
+
+                for (let i = 0; i < gamepads.length; i++) {
+                    let gp = gamepads[i];
+                    if (gp && gp.hand === 'right') {
+                        rightGamepad = gp;
+                        break;
+                    }
+                }
+                // Fallback se il browser non popola la proprietà 'hand'
+                if (!rightGamepad) {
+                    for (let i = 0; i < gamepads.length; i++) {
+                        let gp = gamepads[i];
+                        if (gp && gp.id && (gp.id.toLowerCase().includes('right') || gp.id.toLowerCase().includes('oculus') || gp.id.toLowerCase().includes('meta'))) {
+                            rightGamepad = gp;
+                            break;
+                        }
+                    }
                 }
 
-                // 1. Gestione Gas (Throttle) con il Grilletto Destro
-                let targetThrottle = this.triggerPressed ? 1.0 : 0.0;
+                if (rightGamepad) {
+                    this.controllerConnected = true;
+                    // Pulsante 0 o asse del grilletto (di solito index 0 o trigger button)
+                    this.triggerValue = rightGamepad.buttons[0] ? rightGamepad.buttons[0].value : 0;
+                    // Assi della levetta (di solito axis 2 e 3 o 0 e 1)
+                    this.stickX = rightGamepad.axes[2] !== undefined ? rightGamepad.axes[2] : (rightGamepad.axes[0] !== undefined ? rightGamepad.axes[0] : 0);
+                } else {
+                    this.controllerConnected = false;
+                    this.triggerValue = 0;
+                    this.stickX = 0;
+                }
+
+                // Aggiorna il testo del pannello di debug HUD nel visore
+                if (this.debugTextEl) {
+                    let statusText = this.controllerConnected ? "CONNESSO" : "IN ATTESA...";
+                    this.debugTextEl.setAttribute('value', 
+                        `STATO CONTROLLER: ${statusText}\n` +
+                        `GRILLETTO (Trigger): ${this.triggerValue.toFixed(2)}\n` +
+                        `LEVETTA (ThumbX): ${this.stickX.toFixed(2)}\n` +
+                        `ALTEZZA: ${this.height.toFixed(2)}m`
+                    );
+                }
+
+                // Se premiamo il grilletto (anche parzialmente > 0.1), sblocchiamo l'audio
+                if (this.triggerValue > 0.1) {
+                    initAudio();
+                }
+
+                // 1. Gestione Gas con il valore reale del grilletto
+                let targetThrottle = this.triggerValue;
                 this.throttle += (targetThrottle - this.throttle) * dt * 4.0;
 
-                // Altezza limitata legata al perno
                 this.height += (this.throttle * 2.5 - (this.height - 1.0) * 0.5) * dt;
                 this.height = Math.max(0.6, Math.min(this.height, 3.5));
 
@@ -116,15 +133,14 @@
                 let rotationY = -this.angle * (180 / Math.PI) + 180;
                 this.modelEl.setAttribute('rotation', { x: targetTiltX, y: rotationY, z: 0 });
                 
-                // 4. Velocità visiva dell'elica
+                // 4. Velocità elica
                 if (this.mainRotorEl) {
                     let animDur = Math.max(20, 180 - (this.throttle * 150)); 
                     this.mainRotorEl.setAttribute('animation', `dur: ${animDur}`);
                 }
 
-                // --- AGGIORNAMENTO FREQUENZA RONZIO AUDIO ---
+                // --- AUDIO RONZIO ---
                 if (this.audioInitialized && this.oscillator && this.audioCtx) {
-                    // Frequenza proporzionale al gas (da 60Hz a 300Hz) + un accenno di movimento della levetta
                     let targetFreq = 60 + (this.throttle * 200) + (Math.abs(this.stickX) * 40);
                     this.oscillator.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.1);
                 }
@@ -138,35 +154,24 @@
         <a-light type="ambient" color="#DDD" intensity="0.7"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.9" position="-1 3 1"></a-light>
 
-        <!-- Pavimentazione / Tavolo di gioco -->
+        <!-- Pavimentazione -->
         <a-box position="0 -0.5 0" width="10" height="1" depth="10" material="color: #2b2b2b"></a-box>
         
-        <!-- Perno centrale del Vertibird -->
+        <!-- Perno centrale -->
         <a-cylinder position="0 0 0" radius="0.2" height="1.5" color="#FFCC00"></a-cylinder>
 
-        <!-- Gruppo Elicottero & Braccio Meccanico -->
+        <!-- Gruppo Elicottero & Braccio -->
         <a-entity id="vertibird" vertibird-flight>
-            <!-- Braccio meccanico in cima al perno -->
             <a-entity position="0 0.75 0">
                 <a-box position="-1.5 0 0" width="3.0" height="0.03" depth="0.03" color="#FFCC00"></a-box>
                 
-                <!-- Modello dell'Elicottero -->
                 <a-entity id="heli-model" position="-3.0 0 0" rotation="0 90 0">
-                    
-                    <!-- 1. Cabina Principale -->
                     <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #D32F2F; roughness: 0.3"></a-box>
-                    
-                    <!-- 2. Muso / Cabina di pilotaggio vetrata -->
                     <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65; roughness: 0.1"></a-sphere>
-                    
-                    <!-- 3. Trave di coda -->
                     <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #B71C1C"></a-cylinder>
-                    
-                    <!-- 4. Stabilizzatori di coda -->
                     <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #D32F2F" rotation="0 0 -15"></a-box>
                     <a-box position="-1.22 0.05 0.1" width="0.04" height="0.08" depth="0.3" material="color: #D32F2F"></a-box>
                     
-                    <!-- 5. Pattini di atterraggio -->
                     <a-cylinder position="0.2 -0.28 -0.2" radius="0.015" height="0.18" material="color: #333"></a-cylinder>
                     <a-cylinder position="0.2 -0.28 0.2" radius="0.015" height="0.18" material="color: #333"></a-cylinder>
                     <a-cylinder position="-0.3 -0.28 -0.2" radius="0.015" height="0.18" material="color: #333"></a-cylinder>
@@ -174,7 +179,6 @@
                     <a-box position="-0.05 -0.37 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
                     <a-box position="-0.05 -0.37 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
 
-                    <!-- 6. Rotore Principale -->
                     <a-entity position="0 0.24 0">
                         <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
                         <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
@@ -183,24 +187,28 @@
                         </a-box>
                     </a-entity>
 
-                    <!-- 7. Rotore di Coda -->
                     <a-entity position="-1.28 0.05 -0.05" rotation="90 0 0">
                         <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.07" material="color: #111"
                                animation="property: rotation; to: 0 360 0; loop: true; dur: 50; easing: linear">
                         </a-box>
                     </a-entity>
-                    
                 </a-entity>
             </a-entity>
         </a-entity>
 
-        <!-- Bersagli lungo il percorso -->
+        <!-- Bersagli -->
         <a-torus position="2.5 1.5 2.5" radius="0.5" radius-tubular="0.05" color="#00E676"></a-torus>
         <a-torus position="-2.5 2 -2.5" radius="0.5" radius-tubular="0.05" color="#FFEA00"></a-torus>
 
-        <!-- Camera e Controller Quest 3 -->
+        <!-- Camera, Controller e Pannello HUD di Debug fluttuante davanti agli occhi -->
         <a-entity id="rig" position="0 1.6 3">
-            <a-camera></a-camera>
+            <a-camera>
+                <!-- Pannello di debug visibile in VR -->
+                <a-entity id="debug-panel" position="0 0 -1.5" scale="0.8 0.8 0.8">
+                    <a-plane width="1.4" height="0.5" color="#000000" opacity="0.8" material="shader: flat"></a-plane>
+                    <a-text id="debug-text" value="Caricamento stato controller..." position="-0.65 0.15 0.01" color="#00FF00" width="2.5" font="monoid"></a-text>
+                </a-entity>
+            </a-camera>
             <a-entity id="right-hand" oculus-touch-controls="hand: right"></a-entity>
             <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
         </a-entity>

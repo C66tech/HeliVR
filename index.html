@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Inertia & Smooth Audio</title>
+    <title>VR Vertibird Simulator - Fixed Rotor & Lower Pivot</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -15,7 +15,7 @@
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
 
-                // Angoli di rotazione manuale delle pale (evita blocchi o scatti)
+                // Angoli di rotazione manuale delle pale
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
                 
@@ -43,7 +43,7 @@
                         this.audioCtx = new AudioContext();
                         
                         this.oscillator = this.audioCtx.createOscillator();
-                        this.oscillator.type = 'sawtooth'; // Tono metallico da motore
+                        this.oscillator.type = 'sawtooth';
                         this.oscillator.frequency.setValueAtTime(40, this.audioCtx.currentTime);
 
                         this.gainNode = this.audioCtx.createGain();
@@ -83,14 +83,13 @@
                     for (let gp of gamepads) {
                         if (gp && gp.connected && (gp.hand === 'right' || (gp.id && gp.id.toLowerCase().includes('right')))) {
                             trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
-                            stickY = gp.axes.length >= 4 ? gp.axes.length >= 4 ? gp.axes[3] : 0 : (gp.axes.length >= 2 ? gp.axes[1] : 0);
+                            stickY = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
                             controllerActive = true;
                             break;
                         }
                     }
                 }
 
-                // Attiva l'audio non appena premi il grilletto o tocchi il controller
                 if (trigger > 0.02) {
                     this.initAudio();
                 }
@@ -99,8 +98,7 @@
                 if (Math.abs(stickY) < 0.15) stickY = 0;
                 if (trigger < 0.02) trigger = 0;
 
-                // --- 2. INERZIA E SMOOTHING (Reattività graduale) ---
-                // Il gas e la levetta si muovono dolcemente verso il valore desiderato
+                // --- 2. INERZIA E SMOOTHING ---
                 this.currentThrottle += (trigger - this.currentThrottle) * dt * 4.0;
                 this.currentStickY += (stickY - this.currentStickY) * dt * 5.0;
 
@@ -110,23 +108,22 @@
                         "Sveglia Controller");
                 }
 
-                // --- 3. FISICA DELL'ALTEZZA ---
+                // --- 3. FISICA DELL'ALTEZZA (Perno abbassato a 0.45m) ---
                 let targetHeliY = 0.25 + (this.currentThrottle * 2.75);
                 this.heliY += (targetHeliY - this.heliY) * dt * 3.5;
                 if (this.heliY < 0.25) this.heliY = 0.25;
 
-                // Inclinazione dell'asta (Cerniera Z)
-                let hingeAngleRad = Math.asin((this.heliY - 0.75) / this.radius);
+                // Inclinazione dell'asta ancorata a Y = 0.45m
+                let hingeAngleRad = Math.asin((this.heliY - 0.45) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
 
                 // --- 4. BINARI CIRCOLARI (Senso Antiorario) ---
                 let speedFactor = -this.currentStickY; 
                 this.angle += speedFactor * 0.8 * dt;
 
-                // Applica rotazione globale all'asta
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // --- 5. ASSETTO E INCLINAZIONE DEL MUSO (Pitch con inerzia) ---
+                // --- 5. ASSETTO E INCLINAZIONE DEL MUSO (Pitch) ---
                 if (this.heliWrapperEl) {
                     this.heliWrapperEl.setAttribute('rotation', { x: 0, y: 0, z: -hingeAngleDeg });
                 }
@@ -136,10 +133,10 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 6. ROTAZIONE MANUALE DELLE PALE (Fluida e senza blocchi) ---
+                // --- 6. ROTAZIONE MANUALE DELLE PALE (Sbloccata a tutte le quote) ---
                 if (this.currentThrottle > 0.01) {
-                    // Velocità di rotazione proporzionale al gas attuale
-                    let rotSpeed = this.currentThrottle * 2500; 
+                    // Velocità proporzionale al gas (aumentata per essere fluida e visibile)
+                    let rotSpeed = this.currentThrottle * 3500; 
                     this.rotorAngle += rotSpeed * dt;
                     this.tailRotorAngle += (rotSpeed * 2.5) * dt;
 
@@ -151,7 +148,7 @@
                     }
                 }
 
-                // --- 7. AGGIORNAMENTO AUDIO (Ronzio proporzionale) ---
+                // --- 7. AGGIORNAMENTO AUDIO (Ronzio) ---
                 if (this.audioInitialized && this.oscillator && this.gainNode && this.audioCtx) {
                     let targetFreq = 45 + (this.currentThrottle * 190);
                     let targetVolume = this.currentThrottle > 0.01 ? 0.15 : 0.0;
@@ -170,11 +167,11 @@
         <!-- Pavimentazione / Piano d'atterraggio -->
         <a-box position="0 -0.05 0" width="10" height="0.1" depth="10" material="color: #2b2b2b"></a-box>
         
-        <!-- Perno Centrale (Centro del cerchio dei binari) -->
-        <a-cylinder position="0 0.75 0" radius="0.15" height="1.5" color="#FFCC00"></a-cylinder>
+        <!-- Perno Centrale (Abbassato al 60%: altezza 0.9m, centro a Y = 0.45m) -->
+        <a-cylinder position="0 0.45 0" radius="0.15" height="0.9" color="#FFCC00"></a-cylinder>
 
-        <!-- CERNIERA E ASTA DEL VERTIBIRD -->
-        <a-entity id="vertibird" position="0 0.75 0" vertibird-flight>
+        <!-- CERNIERA E ASTA DEL VERTIBIRD (Fissata a Y = 0.45m) -->
+        <a-entity id="vertibird" position="0 0.45 0" vertibird-flight>
             
             <!-- Asta Meccanica -->
             <a-box id="rod" position="1.5 0 0" width="3.0" height="0.02" depth="0.02" color="#FFCC00"></a-box>
@@ -182,10 +179,10 @@
             <!-- Wrapper Elicottero -->
             <a-entity id="heli-wrapper" position="3.0 0 0">
                 
-                <!-- Tangente al cerchio (Muso rivolto in senso antiorario) -->
+                <!-- Tangente al cerchio -->
                 <a-entity id="heli-yaw" rotation="0 90 0">
                     
-                    <!-- Pitch: Inclinazione avanti/indietro del muso -->
+                    <!-- Pitch: Inclinazione avanti/indietro -->
                     <a-entity id="heli-pitch" rotation="0 0 0">
                         
                         <!-- Modello Elicottero Verde Militare -->
@@ -198,16 +195,16 @@
                         <a-box position="-0.05 -0.25 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
                         <a-box position="-0.05 -0.25 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
 
-                        <!-- Rotore Principale -->
+                        <!-- Rotore Principale (Pale GIALLE) -->
                         <a-entity position="0 0.24 0">
                             <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
                             <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
-                            <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" material="color: #111"></a-box>
+                            <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" material="color: #FFEB3B"></a-box>
                         </a-entity>
 
-                        <!-- Rotore di Coda -->
+                        <!-- Rotore di Coda (Pale GIALLE) -->
                         <a-entity position="-1.28 0.05 -0.05" rotation="90 0 0">
-                            <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.07" material="color: #111"></a-box>
+                            <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.07" material="color: #FFEB3B"></a-box>
                         </a-entity>
 
                     </a-entity>

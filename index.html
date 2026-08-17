@@ -2,142 +2,112 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Precise Quadrant Flight</title>
+    <title>VR Vertibird Simulator - Perfect Physics</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE 1: Polling diretto dal Controller Quest 3
-        AFRAME.registerComponent('raw-gamepad-reader', {
+        AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.trigger = 0;
-                this.stickY = 0;
-                this.textEl = this.el.querySelector('a-text');
-            },
-            tick: function () {
-                let gp = null;
-                let tracked = this.el.components['tracked-controls'];
+                // Posizione iniziale: Davanti al giocatore, muso verso destra
+                this.angle = Math.PI / 2; // 90 gradi
+                this.height = 0.0;        // A terra
+                this.radius = 3.0;        // Distanza dal perno
                 
-                if (tracked && tracked.controller) {
-                    gp = tracked.controller;
-                } else {
-                    let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-                    for (let i = 0; i < gamepads.length; i++) {
-                        if (gamepads[i] && (gamepads[i].hand === 'right' || (gamepads[i].id && gamepads[i].id.toLowerCase().includes('right')))) {
-                            gp = gamepads[i];
+                this.rotorEl = document.querySelector('#main-rotor');
+                this.tailRotorEl = document.querySelector('#tail-rotor');
+                this.modelEl = document.querySelector('#heli-model');
+                this.debugText = document.querySelector('#debug-text');
+            },
+            tick: function (time, delta) {
+                let dt = delta / 1000;
+                let trigger = 0;
+                let stickY = 0;
+                let controllerActive = false;
+
+                // 1. Lettura infallibile WebXR (Priorità Massima in VR)
+                let xrSession = this.el.sceneEl.renderer ? this.el.sceneEl.renderer.xr.getSession() : null;
+                if (xrSession && xrSession.inputSources) {
+                    for (let source of xrSession.inputSources) {
+                        if (source.handedness === 'right' && source.gamepad) {
+                            let gp = source.gamepad;
+                            trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
+                            // Nello standard XR, l'asse Y della levetta è l'indice 3
+                            stickY = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
+                            controllerActive = true;
                             break;
                         }
                     }
                 }
 
-                if (gp) {
-                    // Grilletto per il gas
-                    this.trigger = (gp.buttons && gp.buttons.length > 0) ? gp.buttons[0].value : 0;
-                    
-                    // Levetta Y (Avanti / Indietro)
-                    if (gp.axes) {
-                        if (gp.axes.length > 3) {
-                            this.stickY = gp.axes[3];
-                        } else if (gp.axes.length > 1) {
-                            this.stickY = gp.axes[1];
-                        } else {
-                            this.stickY = 0;
+                // 2. Fallback per test fuori dalla VR
+                if (!controllerActive) {
+                    let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+                    for (let gp of gamepads) {
+                        if (gp && gp.connected && (gp.hand === 'right' || (gp.id && gp.id.toLowerCase().includes('right')))) {
+                            trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
+                            stickY = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
+                            controllerActive = true;
+                            break;
                         }
                     }
-                    
-                    if (this.textEl) {
-                        this.textEl.setAttribute('value', `Gas: ${(this.trigger * 100).toFixed(0)}%\nPitch: ${(-this.stickY).toFixed(2)}`);
+                }
+
+                // --- FILTRI ANTI-FANTASMA ---
+                // Deadzone per evitare drift (movimenti involontari se la levetta non è perfetta)
+                if (Math.abs(stickY) < 0.2) stickY = 0;
+                // Deadzone per il grilletto
+                if (trigger < 0.05) trigger = 0;
+
+                // Mostra i dati sul controller per sicurezza
+                if (this.debugText) {
+                    if (controllerActive) {
+                        this.debugText.setAttribute('value', `Motore: ${(trigger*100).toFixed(0)}%\nLevetta: ${stickY.toFixed(2)}`);
+                    } else {
+                        this.debugText.setAttribute('value', "Sveglia il\nController!");
                     }
-                } else {
-                    this.trigger = 0;
-                    this.stickY = 0;
-                    if (this.textEl) {
-                        this.textEl.setAttribute('value', "Controller Pronto");
-                    }
                 }
 
-                // Invia i dati di controllo all'elicottero
-                let heli = document.getElementById('vertibird');
-                if (heli && heli.components['vertibird-flight']) {
-                    heli.components['vertibird-flight'].triggerValue = this.trigger;
-                    heli.components['vertibird-flight'].stickY = this.stickY;
-                }
-            }
-        });
+                // --- FISICA DI VOLO ---
+                // 1. Altezza Proporzionale al Gas
+                let targetHeight = trigger * 3.0;
+                this.height += (targetHeight - this.height) * dt * 4.0;
+                if (this.height < 0.0) this.height = 0.0;
 
-        // COMPONENTE 2: Fisica del Volo Vincolato
-        AFRAME.registerComponent('vertibird-flight', {
-            init: function () {
-                // Posizione iniziale: davanti al giocatore (angolo -90° / -PI/2) con muso verso destra
-                this.angle = -Math.PI / 2;
-                this.radius = 3.0;
+                // 2. Avanzamento Circolare (Solo se si dà abbastanza gas!)
+                let pitch = -stickY; // Levetta in avanti (negativo) = pitch positivo
                 
-                // Stato controlli
-                this.triggerValue = 0; // Gas (0..1)
-                this.stickY = 0;       // Levetta Avanti/Indietro (-1..1)
-
-                // Riferimenti agli elementi 3D
-                this.rotorEl = document.querySelector('#main-rotor');
-                this.tailRotorEl = document.querySelector('#tail-rotor');
-                this.modelEl = document.querySelector('#heli-model');
-            },
-            tick: function (time, delta) {
-                let dt = delta / 1000;
-
-                // 1. Altezza proporzionale alla pressione del grilletto (0.0m a terra, fino a 3.0m in volo)
-                // Se il grilletto è a 0, l'elicottero è appoggiato a terra (y = 0.0)
-                let groundLevel = 0.0;
-                let maxAltitude = 3.0;
-                let targetHeight = groundLevel + (this.triggerValue * maxAltitude);
-                
-                // Risposta graduale dell'altezza per simulare la portanza dell'elica
-                let currentHeight = parseFloat(this.getAttribute('position').y || 0);
-                let newHeight = currentHeight + (targetHeight - currentHeight) * dt * 4.0;
-
-                // 2. Movimento nel quadrante: FERMO se non inclinato, SENSO ANTIORARIO spingendo la levetta in avanti (-Y)
-                // -stickY > 0.1 significa levetta spinta in avanti -> volo in SENSO ANTIORARIO (+angle)
-                let pitchInput = -this.stickY; // Invertiamo l'asse Y standard per avere il push-forward come positivo
-                let angularSpeed = 0;
-
-                // Si sposta solo se c'è un'inclinazione significativa della levetta
-                if (Math.abs(pitchInput) > 0.15) {
-                    angularSpeed = pitchInput * 1.5; // Velocità di rivoluzione attorno al perno
+                if (trigger > 0.1) {
+                    // Diminuendo l'angolo con pitch positivo si va in senso antiorario verso destra
+                    this.angle -= pitch * 1.5 * dt;
                 }
 
-                this.angle += angularSpeed * dt;
-
-                // Calcolo coordinate circolari attorno al perno centrale (0, 0, 0)
+                // Applica Posizione
                 let x = Math.cos(this.angle) * this.radius;
                 let z = Math.sin(this.angle) * this.radius;
+                this.el.setAttribute('position', { x: x, y: this.height, z: z });
 
-                // Aggiorna posizione complessiva del gruppo elicottero
-                this.el.setAttribute('position', { x: x, y: newHeight, z: z });
-
-                // 3. Orientamento e Tilt del muso
-                // Angolo di puntamento tangenziale (muso verso destra all'inizio)
+                // 3. Orientamento e Inclinazione (Tilt)
+                // baseRotationY fa sì che la coda guardi verso il perno e il muso sia tangente
                 let baseRotationY = -this.angle * (180 / Math.PI) + 180;
                 
-                // Tilt (inclinazione X): muso in giù (-X) quando si vola in avanti/antiorario, in su (+X) se indietro
                 let tiltX = 0;
-                if (Math.abs(pitchInput) > 0.15) {
-                    tiltX = pitchInput * -15; // Max 15 gradi di inclinazione
+                if (trigger > 0.1) {
+                    // Se vado avanti (pitch positivo), inclino il muso in basso (tilt negativo)
+                    tiltX = -pitch * 15;
                 }
 
                 if (this.modelEl) {
                     this.modelEl.setAttribute('rotation', { x: tiltX, y: baseRotationY, z: 0 });
                 }
 
-                // 4. Animazione Elica proporzionale al Gas
-                if (this.rotorEl) {
-                    if (this.triggerValue > 0.02) {
-                        // La velocità di rotazione dell'elica è direttamente proporzionale al grilletto
-                        let speedDuration = Math.max(15, 350 - (this.triggerValue * 330));
-                        this.rotorEl.setAttribute('animation', `property: rotation; to: 0 360 0; loop: true; dur: ${speedDuration}; easing: linear`);
-                        if (this.tailRotorEl) {
-                            this.tailRotorEl.setAttribute('animation', `property: rotation; to: 0 360 0; loop: true; dur: ${speedDuration / 3}; easing: linear`);
-                        }
+                // 4. Velocità visiva dei Rotori
+                if (this.rotorEl && this.tailRotorEl) {
+                    if (trigger > 0.05) {
+                        let speedDur = Math.max(15, 300 - (trigger * 285));
+                        this.rotorEl.setAttribute('animation', `property: rotation; to: 0 360 0; loop: true; dur: ${speedDur}; easing: linear`);
+                        this.tailRotorEl.setAttribute('animation', `property: rotation; to: 0 360 0; loop: true; dur: ${speedDur/1.5}; easing: linear`);
                     } else {
-                        // Elica completamente FERMA all'inizio e quando si rilascia il grilletto
                         this.rotorEl.removeAttribute('animation');
-                        if (this.tailRotorEl) this.tailRotorEl.removeAttribute('animation');
+                        this.tailRotorEl.removeAttribute('animation');
                     }
                 }
             }
@@ -146,67 +116,56 @@
 </head>
 <body>
     <a-scene xr-mode-ui="enabled: true">
-        <!-- Illuminazione -->
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
-        <a-light type="directional" color="#FFF" intensity="0.8" position="-1 4 2"></a-light>
+        <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- Pavimentazione / Piano d'appoggio -->
-        <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="color: #2b2b2b; roughness: 0.8"></a-box>
-        <a-grid position="0 0 0" width="12" height="12" color="#444"></a-grid>
+        <!-- Pavimentazione / Piano d'atterraggio -->
+        <a-box position="0 -0.05 0" width="10" height="0.1" depth="10" material="color: #2b2b2b"></a-box>
         
-        <!-- Perno Centrale (Centro del quadrante) -->
+        <!-- Perno centrale del quadrante (situato all'origine 0,0,0) -->
         <a-cylinder position="0 0.75 0" radius="0.15" height="1.5" color="#FFCC00"></a-cylinder>
-        <a-sphere position="0 1.5 0" radius="0.2" color="#FF9900"></a-sphere>
 
-        <!-- Gruppo Elicottero & Braccio Meccanico -->
-        <!-- Inizia posizionato davanti al giocatore (z = 3.0, y = 0.0) -->
-        <a-entity id="vertibird" position="0 0 3" vertibird-flight>
-            <!-- Braccio meccanico di collegamento al perno -->
+        <!-- L'Elicottero Vertibird -->
+        <a-entity id="vertibird" vertibird-flight>
             <a-entity position="0 0.75 0">
-                <a-box position="1.5 0 0" width="3.0" height="0.02" depth="0.02" color="#FFCC00" opacity="0.7"></a-box>
+                <!-- Braccio meccanico legato al perno centrale -->
+                <a-box position="-1.5 0 0" width="3.0" height="0.02" depth="0.02" color="#FFCC00"></a-box>
                 
                 <!-- Modello dell'Elicottero Verde Militare -->
-                <a-entity id="heli-model" position="3.0 -0.38 0" rotation="0 90 0">
-                    
-                    <!-- Cabina Principale -->
-                    <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #388E3C; roughness: 0.4"></a-box>
-                    
-                    <!-- Muso Vetrato -->
-                    <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.6; roughness: 0.1"></a-sphere>
-                    
-                    <!-- Trave di Coda -->
-                    <a-cylinder position="-0.75 0.05 0" radius="0.05" height="1.0" rotation="0 0 90" material="color: #2E7D32"></a-cylinder>
+                <a-entity id="heli-model" position="-3.0 0 0">
+                    <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #388E3C; roughness: 0.3"></a-box>
+                    <a-sphere position="0.32 0 0" radius="0.22" material="color: #00E5FF; opacity: 0.65"></a-sphere>
+                    <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #2E7D32"></a-cylinder>
                     <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #388E3C" rotation="0 0 -15"></a-box>
                     
-                    <!-- Pattini d'atterraggio (appoggiati a terra) -->
-                    <a-box position="-0.05 -0.22 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
-                    <a-box position="-0.05 -0.22 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
+                    <!-- Pattini appoggiati a terra -->
+                    <a-box position="-0.05 -0.25 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
+                    <a-box position="-0.05 -0.25 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
 
                     <!-- Rotore Principale -->
                     <a-entity position="0 0.24 0">
-                        <a-cylinder position="0 0.05 0" radius="0.03" height="0.1" material="color: #111"></a-cylinder>
-                        <a-box id="main-rotor" position="0 0.1 0" width="2.6" height="0.012" depth="0.1" material="color: #111"></a-box>
+                        <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #111"></a-cylinder>
+                        <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
+                        <a-box id="main-rotor" position="0 0.19 0" width="2.6" height="0.012" depth="0.1" material="color: #111"></a-box>
                     </a-entity>
 
                     <!-- Rotore di Coda -->
                     <a-entity position="-1.28 0.05 -0.05" rotation="90 0 0">
-                        <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.06" material="color: #111"></a-box>
+                        <a-box id="tail-rotor" width="0.35" height="0.01" depth="0.07" material="color: #111"></a-box>
                     </a-entity>
-                    
                 </a-entity>
             </a-entity>
         </a-entity>
 
-        <!-- Camera / Giocatore (Posizionato di fronte al perno) -->
-        <a-entity id="rig" position="0 1.2 4.5">
-            <a-camera></a-camera>
+        <!-- Camera e Rig VR (Giocatore posizionato fuori dal raggio per vedere bene l'elicottero) -->
+        <a-entity id="rig" position="0 0 5.5">
+            <a-camera position="0 1.5 0"></a-camera>
             
-            <!-- Controller Destro con lettura grezza e HUD dinamico -->
-            <a-entity id="right-hand" oculus-touch-controls="hand: right" raw-gamepad-reader>
-                <a-text value="In attesa..." position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#00FF66" align="center"></a-text>
+            <!-- Controller Destro con HUD incollato -->
+            <a-entity id="right-hand" oculus-touch-controls="hand: right">
+                <a-text id="debug-text" value="Caricamento..." position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#00FF66" align="center"></a-text>
             </a-entity>
 
-            <!-- Controller Sinistro -->
             <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
         </a-entity>
     </a-scene>

@@ -2,22 +2,25 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Custom Schematic Model</title>
+    <title>VR Vertibird Simulator - Zoom & Controls</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
+        // COMPONENTE: Gestione Input, Zoom con tasti A/B e Fisica del Vertibird
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
                 this.angle = 0;        
                 this.heliY = 0.25;     
                 this.radius = 4.5;     
                 
-                // Inerzia
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
 
-                // Rotazione pale
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
+
+                // Gestione Zoom della Telecamera (distanza del rig)
+                this.rigEl = document.querySelector('#rig');
+                this.cameraDistance = 7.5;
                 
                 this.heliWrapperEl = document.querySelector('#heli-wrapper');
                 this.heliPitchEl = document.querySelector('#heli-pitch');
@@ -59,6 +62,21 @@
 
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
+
+                // --- ASCOLTO TASTI A e B (Eventi A-Frame Oculus Touch) ---
+                let rightHand = document.querySelector('#right-hand');
+                
+                // Tasto A (pulsante aup / abuttondown): Zoom Out (Allontana la visuale)
+                rightHand.addEventListener('abuttondown', () => {
+                    this.cameraDistance = Math.min(12.0, this.cameraDistance + 0.5);
+                    if (this.rigEl) this.rigEl.setAttribute('position', `0 0 ${this.cameraDistance}`);
+                });
+
+                // Tasto B (pulsante bbuttondown): Zoom In (Avvicina la visuale)
+                rightHand.addEventListener('bbuttondown', () => {
+                    this.cameraDistance = Math.max(3.0, this.cameraDistance - 0.5);
+                    if (this.rigEl) this.rigEl.setAttribute('position', `0 0 ${this.cameraDistance}`);
+                });
             },
             tick: function (time, delta) {
                 let dt = delta / 1000;
@@ -105,7 +123,7 @@
 
                 if (this.debugText) {
                     this.debugText.setAttribute('value', controllerActive ? 
-                        `Gas: ${(this.currentThrottle*100).toFixed(0)}%\nStick: ${this.currentStickY.toFixed(2)}` : 
+                        `Gas: ${(this.currentThrottle*100).toFixed(0)}%\nZoom: ${this.cameraDistance.toFixed(1)}m` : 
                         "Sveglia Controller");
                 }
 
@@ -189,7 +207,7 @@
         <!-- Perno Centrale a Cono -->
         <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
 
-        <!-- VERTIBIRD -->
+        <!-- VERTIBIRD (Colleghiamo qui il componente di volo principale) -->
         <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
             
             <!-- Asta Meccanica -->
@@ -200,23 +218,19 @@
                 <a-entity id="heli-yaw" rotation="0 90 0">
                     <a-entity id="heli-pitch" rotation="0 0 0">
                         
-                        <!-- ========================================== -->
-                        <!-- MODELLO GEOMETRICO BASATO SUL TUO DISEGNO -->
-                        <!-- ========================================== -->
-
-                        <!-- 1. Cabina Principale (Sfera Rossa) -->
+                        <!-- Cabina Principale (Sfera Rossa) -->
                         <a-sphere position="0 0 0" radius="0.35" material="color: #E53935; roughness: 0.3"></a-sphere>
 
-                        <!-- 2. Struttura di Coda (Cono Verde) -->
+                        <!-- Struttura di Coda (Cono Verde) -->
                         <a-cone position="-0.9 0.05 0" radius-bottom="0.22" radius-top="0.08" height="1.4" rotation="0 0 90" material="color: #43A047"></a-cone>
 
-                        <!-- 3. Rotore di Coda (Piramide/Triangolo Viola) -->
+                        <!-- Rotore di Coda (Piramide/Triangolo Viola) -->
                         <a-entity position="-1.65 0.12 0" rotation="0 0 -90">
                             <a-cone radius-bottom="0.18" height="0.25" segments-radial="3" material="color: #8E24AA"></a-cone>
                             <a-box id="tail-rotor" width="0.4" height="0.015" depth="0.08" color="#FFEB3B" rotation="90 0 0"></a-box>
                         </a-entity>
 
-                        <!-- 4. Pattini e Carrello (Viola) -->
+                        <!-- Pattini e Carrello (Viola) -->
                         <a-box position="0.1 -0.3 -0.22" width="0.7" height="0.025" depth="0.03" material="color: #8E24AA"></a-box>
                         <a-box position="0.1 -0.3 0.22" width="0.7" height="0.025" depth="0.03" material="color: #8E24AA"></a-box>
                         <a-box position="0.15 -0.16 -0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 15" material="color: #8E24AA"></a-box>
@@ -224,7 +238,7 @@
                         <a-box position="0.15 -0.16 0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 15" material="color: #8E24AA"></a-box>
                         <a-box position="-0.15 -0.16 0.22" width="0.025" height="0.25" depth="0.02" rotation="0 0 -15" material="color: #8E24AA"></a-box>
 
-                        <!-- 5. Rotore Principale (Albero e Pale Gialle) -->
+                        <!-- Rotore Principale (Albero e Pale Gialle) -->
                         <a-entity position="0 0.35 0">
                             <a-cylinder radius="0.04" height="0.15" material="color: #8E24AA"></a-cylinder>
                             <a-sphere position="0 0.08 0" radius="0.07" material="color: #FFCC00"></a-sphere>
@@ -240,6 +254,7 @@
         <a-entity id="rig" position="0 0 7.5">
             <a-camera position="0 1.5 0"></a-camera>
             
+            <!-- Controller Destro con tasti A/B abilitati per lo Zoom -->
             <a-entity id="right-hand" oculus-touch-controls="hand: right">
                 <a-text id="debug-text" value="Pronto" position="0 0.08 -0.05" scale="0.15 0.15 0.15" rotation="-45 0 0" color="#00FF66" align="center"></a-text>
             </a-entity>

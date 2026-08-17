@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Proportional Physics & Deep Audio</title>
+    <title>VR Vertibird Simulator - Final Mechanics & Red Skids</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -44,7 +44,6 @@
                         
                         this.oscillator = this.audioCtx.createOscillator();
                         this.oscillator.type = 'sawtooth';
-                        // Frequenza di base più bassa e profonda
                         this.oscillator.frequency.setValueAtTime(30, this.audioCtx.currentTime);
 
                         this.gainNode = this.audioCtx.createGain();
@@ -109,9 +108,14 @@
                         "Sveglia Controller");
                 }
 
-                // --- 3. FISICA DELL'ALTEZZA (Altezza massima limitata) ---
-                // Il range di altezza viene limitato a circa 1.7 metri max
-                let targetHeliY = 0.25 + (this.currentThrottle * 1.5);
+                // --- 3. FISICA DELL'ALTEZZA CON SOGLIA DI DECOLLO ---
+                // L'elicottero non si solleva se l'elica non supera il 15% di velocità
+                let effectiveThrottle = 0;
+                if (this.currentThrottle > 0.15) {
+                    effectiveThrottle = (this.currentThrottle - 0.15) / 0.85; // Ricalibra la corsa utile
+                }
+
+                let targetHeliY = 0.25 + (effectiveThrottle * 1.5);
                 this.heliY += (targetHeliY - this.heliY) * dt * 4.0;
                 if (this.heliY < 0.25) this.heliY = 0.25;
 
@@ -120,22 +124,22 @@
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
 
                 // --- 4. MOTO CIRCOLARE PROPORZIONALE ---
-                // La velocità di spostamento sui binari dipende da:
-                // 1. Inclinazione della levetta (stickY)
-                // 2. Velocità delle pale (currentThrottle) -> Più giri l'elica, più acquisisci velocità di marcia!
+                // stickY positivo = avanti -> muove l'angolo sui binari
                 let speedFactor = this.currentStickY; 
                 let angularSpeed = speedFactor * this.currentThrottle * 1.8; 
                 this.angle += angularSpeed * dt;
 
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // --- 5. ASSETTO E INCLINAZIONE DEL MUSO (Pitch) ---
+                // --- 5. ASSETTO E INCLINAZIONE DEL MUSO (Pitch corretto) ---
                 if (this.heliWrapperEl) {
                     this.heliWrapperEl.setAttribute('rotation', { x: 0, y: 0, z: -hingeAngleDeg });
                 }
 
                 if (this.heliPitchEl) {
-                    let pitchAngle = -speedFactor * 15.0; // Inclinazione proporzionale al comando
+                    // Quando spingi in avanti (speedFactor > 0) il muso si ABBASSA (valore negativo)
+                    // Quando tiri indietro (speedFactor < 0) il muso si ALZA (valore positivo)
+                    let pitchAngle = speedFactor * 15.0; 
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
@@ -153,9 +157,9 @@
                     }
                 }
 
-                // --- 7. AGGIORNAMENTO AUDIO (Ronzio basso e profondo) ---
+                // --- 7. AGGIORNAMENTO AUDIO (Ronzio profondo) ---
                 if (this.audioInitialized && this.oscillator && this.gainNode && this.audioCtx) {
-                    let targetFreq = 30 + (this.currentThrottle * 70); // Range di frequenza più basso (da 30Hz a 100Hz)
+                    let targetFreq = 30 + (this.currentThrottle * 70);
                     let targetVolume = this.currentThrottle > 0.01 ? 0.18 : 0.0;
                     this.oscillator.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.1);
                     this.gainNode.gain.setTargetAtTime(targetVolume, this.audioCtx.currentTime, 0.1);
@@ -196,9 +200,9 @@
                         <a-cylinder position="-0.75 0.05 0" radius="0.055" height="1.0" rotation="0 0 90" material="color: #2E7D32"></a-cylinder>
                         <a-box position="-1.22 0.18 0" width="0.04" height="0.28" depth="0.18" material="color: #388E3C" rotation="0 0 -15"></a-box>
                         
-                        <!-- Pattini d'atterraggio -->
-                        <a-box position="-0.05 -0.25 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
-                        <a-box position="-0.05 -0.25 0.22" width="0.75" height="0.025" depth="0.035" material="color: #111"></a-box>
+                        <!-- Pattini d'atterraggio ROSSI -->
+                        <a-box position="-0.05 -0.25 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #D32F2F"></a-box>
+                        <a-box position="-0.05 -0.25 0.22" width="0.75" height="0.025" depth="0.035" material="color: #D32F2F"></a-box>
 
                         <!-- Rotore Principale (PALE GIALLE) -->
                         <a-entity position="0 0.24 0">

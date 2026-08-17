@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Tiny Scale & Opaque Base</title>
+    <title>VR Vertibird Simulator - Terreno Texture</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -263,11 +263,11 @@
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- CONTENITORE GLOBALE DEL DIORAMA (Posizionato vicino: X=0, Y=-0.3, Z=-1.2) -->
+        <!-- CONTENITORE GLOBALE DEL DIORAMA -->
         <a-entity id="world-root" position="0 -0.3 -1.2" rotation="0 0 0" scale="1 1 1">
             
-            <!-- Pavimentazione opaca senza trasparenza -->
-            <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="color: #2b2b2b"></a-box>
+            <!-- Base con texture PNG terreno.png -->
+            <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="src: url(terreno.png); repeat: 10 10; roughness: 0.8"></a-box>
             
             <!-- Perno Centrale a Cono -->
             <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>

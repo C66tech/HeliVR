@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Horizontal Inertia v1.2.0</title>
+    <title>VertiVR Simulator - Configurable Inertia v1.3.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "1.2.0"; // Versione aggiornata
+                this.version = "1.3.0"; // Versione aggiornata
                 this.angle = 0;        
                 this.heliY = 0.31;     
                 this.radius = 4.5;     
@@ -17,12 +17,11 @@
 
                 // --- INERZIA MOTO CIRCOLARE ---
                 this.angularVelocity = 0; // Velocità di rotazione corrente (deg/s)
-                this.angularAcceleration = 180.0; // Quanto velocemente accelera (deg/s^2)
-                this.friction = 1.2; // Attrito dell'aria che rallenta l'inerzia quando non si dà gas/pitch
 
                 // Parametri regolabili da Menu
                 this.speedMultiplier = 90.0; 
                 this.windAmplitude = 0;    // Vento da 0 a 150
+                this.inertiaValue = 20;    // Inerzia da 0 (nessuna) a 100 (massima)
 
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
@@ -46,6 +45,7 @@
                 // Elementi Menu
                 this.speedText = document.querySelector('#menu-speed-val');
                 this.windText = document.querySelector('#menu-wind-val');
+                this.inertiaText = document.querySelector('#menu-inertia-val');
                 this.versionText = document.querySelector('#menu-version-val');
 
                 if (this.worldRoot && this.worldRoot.object3D) {
@@ -130,6 +130,7 @@
                 this.updateMenuUI = () => {
                     if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
                     if (this.windText) this.windText.setAttribute('value', `${this.windAmplitude.toFixed(0)}`);
+                    if (this.inertiaText) this.inertiaText.setAttribute('value', `${this.inertiaValue.toFixed(0)}`);
                     if (this.versionText) this.versionText.setAttribute('value', `v${this.version}`);
                 };
 
@@ -137,6 +138,8 @@
                 let btnSpeedInc = document.querySelector('#btn-speed-inc');
                 let btnWindDec = document.querySelector('#btn-wind-dec');
                 let btnWindInc = document.querySelector('#btn-wind-inc');
+                let btnInertiaDec = document.querySelector('#btn-inertia-dec');
+                let btnInertiaInc = document.querySelector('#btn-inertia-inc');
 
                 if (btnSpeedDec) btnSpeedDec.addEventListener('click', () => {
                     this.speedMultiplier = Math.max(10.0, this.speedMultiplier - 15.0);
@@ -152,6 +155,14 @@
                 });
                 if (btnWindInc) btnWindInc.addEventListener('click', () => {
                     this.windAmplitude = Math.min(150, this.windAmplitude + 10);
+                    this.updateMenuUI();
+                });
+                if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => {
+                    this.inertiaValue = Math.max(0, this.inertiaValue - 10);
+                    this.updateMenuUI();
+                });
+                if (btnInertiaInc) btnInertiaInc.addEventListener('click', () => {
+                    this.inertiaValue = Math.min(100, this.inertiaValue + 10);
                     this.updateMenuUI();
                 });
 
@@ -279,28 +290,32 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 7. MOTO CIRCOLARE CON INERZIA FISICA ---
+                // --- 7. MOTO CIRCOLARE CON INERZIA CONFIGURABILE ---
                 if (this.heliY > 0.315) {
-                    // La spinta (pitch * potenza motore) genera un'accelerazione angolare
-                    let thrust = -speedFactor * effectiveThrottleInput * this.speedMultiplier * 2.5;
-                    
-                    // Applichiamo la spinta alla velocità angolare
-                    this.angularVelocity += thrust * dt;
+                    let targetSpeed = -speedFactor * effectiveThrottleInput * this.speedMultiplier;
 
-                    // Attrito dell'aria (decollo/resistenza)
-                    this.angularVelocity -= this.angularVelocity * this.friction * dt;
+                    if (this.inertiaValue <= 0) {
+                        // Nessuna inerzia (risposta diretta)
+                        this.angularVelocity = targetSpeed;
+                    } else {
+                        // Calcolo dinamico di accelerazione/attrito in base a inertiaValue (1-100)
+                        let inertiaFactor = this.inertiaValue / 100.0;
+                        let accelRate = 0.5 + ((1.0 - inertiaFactor) * 12.0); // Più l'inerzia è alta, più lento accelera
+                        let friction = 0.3 + ((1.0 - inertiaFactor) * 8.0);   // Più l'inerzia è alta, più scivola senza frenare
 
-                    // Limite velocità massima
-                    let maxSpeed = this.speedMultiplier * 2.0;
-                    this.angularVelocity = Math.max(-maxSpeed, Math.min(maxSpeed, this.angularVelocity));
+                        let thrust = (targetSpeed - this.angularVelocity) * accelRate;
+                        this.angularVelocity += thrust * dt;
 
-                    // Aggiornamento angolo di rotazione
+                        if (Math.abs(targetSpeed) < 0.05) {
+                            this.angularVelocity -= this.angularVelocity * friction * dt;
+                        }
+                    }
+
                     this.angle += this.angularVelocity * dt;
                     this.currentAngularSpeed = Math.abs(this.angularVelocity);
                 } else {
-                    // Se a terra, l'attrito col terreno ferma rapidamente la rotazione
-                    this.angularVelocity -= this.angularVelocity * 8.0 * dt;
-                    if (Math.abs(this.angularVelocity) < 0.1) this.angularVelocity = 0;
+                    // Se a terra, si ferma subito
+                    this.angularVelocity = 0;
                     this.currentAngularSpeed = 0;
                 }
 
@@ -469,35 +484,48 @@
                 <!-- Sfondo Mappato 9:16 -->
                 <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                <!-- CONTROLLI NELLA PARTE INFERIORE -->
-                <!-- RIGA 1: SPEED (Y = -0.5) -->
-                <a-text value="Speed" position="-1.5 -0.5 0.05" align="left" width="5.5" color="#000000"></a-text>
+                <!-- CONTROLLI NELLA PARTE INFERIORE CON TESTO NERO -->
+                <!-- RIGA 1: SPEED (Y = -0.3) -->
+                <a-text value="Speed" position="-1.5 -0.3 0.05" align="left" width="5.5" color="#000000"></a-text>
                 
-                <a-plane id="btn-speed-dec" class="clickable" position="-0.3 -0.5 0.05" width="0.45" height="0.45" color="#D32F2F">
+                <a-plane id="btn-speed-dec" class="clickable" position="-0.3 -0.3 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
                 
-                <a-text id="menu-speed-val" value="90 deg/s" position="0.6 -0.5 0.05" align="center" width="4.5" color="#000000"></a-text>
+                <a-text id="menu-speed-val" value="90 deg/s" position="0.6 -0.3 0.05" align="center" width="4.5" color="#000000"></a-text>
                 
-                <a-plane id="btn-speed-inc" class="clickable" position="1.35 -0.5 0.05" width="0.45" height="0.45" color="#388E3C">
+                <a-plane id="btn-speed-inc" class="clickable" position="1.35 -0.3 0.05" width="0.4" height="0.4" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <!-- RIGA 2: WIND (Y = -1.4) -->
-                <a-text value="Wind" position="-1.5 -1.4 0.05" align="left" width="5.5" color="#000000"></a-text>
+                <!-- RIGA 2: WIND (Y = -1.0) -->
+                <a-text value="Wind" position="-1.5 -1.0 0.05" align="left" width="5.5" color="#000000"></a-text>
                 
-                <a-plane id="btn-wind-dec" class="clickable" position="-0.3 -1.4 0.05" width="0.45" height="0.45" color="#D32F2F">
+                <a-plane id="btn-wind-dec" class="clickable" position="-0.3 -1.0 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
                 
-                <a-text id="menu-wind-val" value="0" position="0.6 -1.4 0.05" align="center" width="4.5" color="#000000"></a-text>
+                <a-text id="menu-wind-val" value="0" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
                 
-                <a-plane id="btn-wind-inc" class="clickable" position="1.35 -1.4 0.05" width="0.45" height="0.45" color="#388E3C">
+                <a-plane id="btn-wind-inc" class="clickable" position="1.35 -1.0 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
+
+                <!-- RIGA 3: INERTIA (Y = -1.7) -->
+                <a-text value="Inertia" position="-1.5 -1.7 0.05" align="left" width="5.5" color="#000000"></a-text>
+                
+                <a-plane id="btn-inertia-dec" class="clickable" position="-0.3 -1.7 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
+                
+                <a-text id="menu-inertia-val" value="20" position="0.6 -1.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                
+                <a-plane id="btn-inertia-inc" class="clickable" position="1.35 -1.7 0.05" width="0.4" height="0.4" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ (Y = -2.8) -->
-                <a-text id="menu-version-val" value="v1.2.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v1.3.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

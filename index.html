@@ -2,14 +2,14 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Enhanced Wind Buzz Sound v1.7.1</title>
+    <title>VertiVR Simulator - Puzzle Mode & Undo Platform v2.1.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "1.7.1"; // Versione aggiornata
+                this.version = "2.1.0"; 
                 this.angle = 0;        
-                this.heliY = 0.39;     // Quota minima alzata per non far affondare le ruote
+                this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
                 this.radius = 4.5;     
                 
@@ -17,17 +17,17 @@
                 this.currentStickY = 0;
 
                 // --- INERZIA MOTO CIRCOLARE ---
-                this.angularVelocity = 0; // Velocità di rotazione corrente (deg/s)
+                this.angularVelocity = 0; 
 
-                // Parametri regolabili da Menu
+                // Parametri Menu
                 this.speedMultiplier = 90.0; 
-                this.windAmplitude = 0;    // Vento da 0 a 150
-                this.inertiaValue = 20;    // Inerzia da 0 (nessuna) a 100 (massima)
+                this.wobbleAmplitude = 0;   
+                this.inertiaValue = 20;     
 
                 this.rotorAngle = 0;
-                this.currentAngularSpeed = 0; // Velocità radiale istantanea per l'audio
+                this.currentAngularSpeed = 0; 
 
-                // Gestione World Root e Scala Iniziale
+                // Gestione World Root
                 this.worldRoot = document.querySelector('#world-root');
                 this.currentScale = 0.06; 
                 this.isDragging = false;
@@ -41,6 +41,28 @@
                 this.rightHandEl = document.querySelector('#right-hand');
                 this.leftHandEl = document.querySelector('#left-hand');
 
+                // Elementi Silos, Pila e Target
+                this.siloStackEl = document.querySelector('#silo-stack');
+                this.targetDisplayEl = document.querySelector('#target-display');
+                this.stackedCubes = [];
+                this.stackedColors = [];
+                this.cubeHeight = 0.25;
+
+                // Stato Gioco / Livelli
+                this.currentLevel = 1;
+                this.availableColors = ['#E53935', '#4CAF50', '#1E88E5', '#8E24AA', '#FB8C00'];
+                this.targetSequence = [];
+                this.canUndo = true;
+
+                // Configurazione Anelli (Angoli e Altezze)
+                this.rings = [
+                    { id: 'ring-1', angle: 0,   height: 0.8,  color: '#E53935', passed: false }, // Ore 12 (Rosso)
+                    { id: 'ring-2', angle: 60,  height: 1.4,  color: '#4CAF50', passed: false }, // Ore 2 (Verde)
+                    { id: 'ring-3', angle: 120, height: 2.1,  color: '#1E88E5', passed: false }, // Ore 4 (Blu)
+                    { id: 'ring-4', angle: 240, height: 1.1,  color: '#8E24AA', passed: false }, // Ore 8 (Viola)
+                    { id: 'ring-5', angle: 300, height: 2.5,  color: '#FB8C00', passed: false }  // Ore 10 (Arancione)
+                ];
+
                 // Elementi Menu
                 this.speedText = document.querySelector('#menu-speed-val');
                 this.windText = document.querySelector('#menu-wind-val');
@@ -51,18 +73,16 @@
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
 
-                // --- SISTEMA AUDIO DOPPIO (Motore + Wind Buzz) ---
+                // Generazione Schema Obiettivo Iniziale
+                this.generateLevelTarget();
+
+                // --- SISTEMA AUDIO DOPPIO ---
                 this.audioCtx = null;
-                
-                // 1. Audio Motore
                 this.oscillator = null;
                 this.gainNode = null;
-
-                // 2. Audio "Wind Buzz" Radiale (Fischio / Fruscio Aerodinamico)
                 this.windOsc = null;
                 this.windFilter = null;
                 this.windGain = null;
-                
                 this.audioInitialized = false;
 
                 this.initAudio = () => {
@@ -76,7 +96,6 @@
                         window.AudioContext = window.AudioContext || window.webkitAudioContext;
                         this.audioCtx = new AudioContext();
                         
-                        // 1. Sintesi Motore (Grave / Sawtooth)
                         this.oscillator = this.audioCtx.createOscillator();
                         this.oscillator.type = 'sawtooth';
                         this.oscillator.frequency.setValueAtTime(30, this.audioCtx.currentTime);
@@ -88,15 +107,14 @@
                         this.gainNode.connect(this.audioCtx.destination);
                         this.oscillator.start();
 
-                        // 2. Sintesi "Wind Buzz" (Acuta e Fischeggiante)
                         this.windOsc = this.audioCtx.createOscillator();
-                        this.windOsc.type = 'sawtooth'; // Cambiato in sawtooth per più armoniche acute
+                        this.windOsc.type = 'sawtooth'; 
                         this.windOsc.frequency.setValueAtTime(250, this.audioCtx.currentTime);
 
                         this.windFilter = this.audioCtx.createBiquadFilter();
                         this.windFilter.type = 'bandpass';
                         this.windFilter.frequency.setValueAtTime(400, this.audioCtx.currentTime);
-                        this.windFilter.Q.setValueAtTime(4.0, this.audioCtx.currentTime); // Risonanza acuta
+                        this.windFilter.Q.setValueAtTime(4.0, this.audioCtx.currentTime); 
 
                         this.windGain = this.audioCtx.createGain();
                         this.windGain.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
@@ -113,7 +131,7 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // --- SCALING FINE CON TASTI A E B ---
+                // --- SCALING CON TASTI A E B ---
                 const applyScale = (delta) => {
                     this.currentScale = Math.min(3.0, Math.max(0.02, this.currentScale + delta));
                     if (this.worldRoot && this.worldRoot.object3D) {
@@ -128,7 +146,7 @@
                 // --- LOGICA PULSANTI MENU ---
                 this.updateMenuUI = () => {
                     if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
-                    if (this.windText) this.windText.setAttribute('value', `${this.windAmplitude.toFixed(0)}`);
+                    if (this.windText) this.windText.setAttribute('value', `${this.wobbleAmplitude.toFixed(0)}`);
                     if (this.inertiaText) this.inertiaText.setAttribute('value', `${this.inertiaValue.toFixed(0)}`);
                     if (this.versionText) this.versionText.setAttribute('value', `v${this.version}`);
                 };
@@ -149,11 +167,11 @@
                     this.updateMenuUI();
                 });
                 if (btnWindDec) btnWindDec.addEventListener('click', () => {
-                    this.windAmplitude = Math.max(0, this.windAmplitude - 10);
+                    this.wobbleAmplitude = Math.max(0, this.wobbleAmplitude - 10);
                     this.updateMenuUI();
                 });
                 if (btnWindInc) btnWindInc.addEventListener('click', () => {
-                    this.windAmplitude = Math.min(150, this.windAmplitude + 10);
+                    this.wobbleAmplitude = Math.min(150, this.wobbleAmplitude + 10);
                     this.updateMenuUI();
                 });
                 if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => {
@@ -167,6 +185,104 @@
 
                 this.updateMenuUI();
             },
+
+            // Genera la sequenza target per il livello attuale
+            generateLevelTarget: function() {
+                this.targetSequence = [];
+                // La lunghezza della sequenza cresce con il livello (es. 3, 4, 5 cubi)
+                let targetLength = Math.min(5, 2 + this.currentLevel);
+
+                for (let i = 0; i < targetLength; i++) {
+                    let randColor = this.availableColors[Math.floor(Math.random() * this.availableColors.length)];
+                    this.targetSequence.push(randColor);
+                }
+                this.renderTargetDisplay();
+            },
+
+            // Visualizza gli indicatori target sul pannello ologramma a sud
+            renderTargetDisplay: function() {
+                if (!this.targetDisplayEl) return;
+                this.targetDisplayEl.innerHTML = '';
+
+                let titleText = document.createElement('a-text');
+                titleText.setAttribute('value', `LEVEL ${this.currentLevel} TARGET`);
+                titleText.setAttribute('position', '0 1.2 0');
+                titleText.setAttribute('align', 'center');
+                titleText.setAttribute('width', '3');
+                titleText.setAttribute('color', '#111');
+                this.targetDisplayEl.appendChild(titleText);
+
+                this.targetSequence.forEach((color, idx) => {
+                    let sphereTarget = document.createElement('a-sphere');
+                    sphereTarget.setAttribute('radius', '0.08');
+                    let startX = -((this.targetSequence.length - 1) * 0.22) / 2;
+                    sphereTarget.setAttribute('position', `${startX + (idx * 0.22)} 0.9 0`);
+                    sphereTarget.setAttribute('material', `color: ${color}; roughness: 0.2`);
+                    this.targetDisplayEl.appendChild(sphereTarget);
+                });
+            },
+
+            // Aggiunge un cubetto nel Silos sul lato destro
+            spawnCubeInSilo: function(color) {
+                if (!this.siloStackEl) return;
+
+                let cubeCount = this.stackedCubes.length;
+                let targetY = 0.125 + (cubeCount * this.cubeHeight);
+
+                let newCube = document.createElement('a-box');
+                newCube.setAttribute('width', '0.28');
+                newCube.setAttribute('height', '0.24');
+                newCube.setAttribute('depth', '0.28');
+                newCube.setAttribute('position', `0 ${targetY} 0`);
+                newCube.setAttribute('material', `color: ${color}; roughness: 0.3; metalness: 0.1`);
+
+                this.siloStackEl.appendChild(newCube);
+                this.stackedCubes.push(newCube);
+                this.stackedColors.push(color);
+
+                this.checkLevelCompletion();
+            },
+
+            // Sfila l'ultimo cubo inserito (Azione Undo toccando la piattaforma)
+            popLastCubeFromSilo: function() {
+                if (this.stackedCubes.length === 0) return;
+
+                let lastCube = this.stackedCubes.pop();
+                this.stackedColors.pop();
+                if (lastCube && lastCube.parentNode) {
+                    lastCube.parentNode.removeChild(lastCube);
+                }
+            },
+
+            // Verifica se la pila corrisponde all'obiettivo
+            checkLevelCompletion: function() {
+                if (this.stackedColors.length < this.targetSequence.length) return;
+
+                let isCorrect = true;
+                for (let i = 0; i < this.targetSequence.length; i++) {
+                    if (this.stackedColors[i] !== this.targetSequence[i]) {
+                        isCorrect = false;
+                        break;
+                    }
+                }
+
+                if (isCorrect) {
+                    // LIVELLO SUPERATO!
+                    setTimeout(() => {
+                        alert(`LIVELLO ${this.currentLevel} SUPERATO!`);
+                        this.currentLevel++;
+                        this.clearSiloStack();
+                        this.generateLevelTarget();
+                    }, 300);
+                }
+            },
+
+            clearSiloStack: function() {
+                while (this.stackedCubes.length > 0) {
+                    this.popLastCubeFromSilo();
+                }
+            },
+
             tick: function (time, delta) {
                 let dt = delta / 1000;
                 let t = time / 1000; 
@@ -211,7 +327,7 @@
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // --- 2. LOGICA GRAB DEL DIORAMA (ROTAZIONE SOLO ASSE Y) ---
+                // --- 2. LOGICA GRAB DEL DIORAMA ---
                 if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
                     let handObj = this.rightHandEl.object3D;
                     
@@ -249,28 +365,31 @@
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // --- 4. TURBOLENZE DEL VENTO (RANGE 0 - 150) ---
-                let windThrottleOffset = 0;
-                let windStickOffset = 0;
+                // --- 4. WOBBLING ---
+                let wobbleThrottleOffset = 0;
+                let wobbleStickOffset = 0;
 
-                if (this.windAmplitude > 0) {
-                    let normWind = this.windAmplitude / 100.0;
-                    windThrottleOffset = ((Math.sin(t * 2.3) * 0.05) + (Math.cos(t * 4.7) * 0.025)) * normWind;
-                    windStickOffset = ((Math.sin(t * 1.9) * 0.08) + (Math.cos(t * 3.8) * 0.04)) * normWind;
+                let isAirborne = this.heliY > (this.minHeliY + 0.005);
+
+                if (this.wobbleAmplitude > 0 && isAirborne) {
+                    let normWobble = this.wobbleAmplitude / 100.0;
+                    wobbleThrottleOffset = ((Math.sin(t * 2.3) * 0.05) + (Math.cos(t * 4.7) * 0.025)) * normWobble;
+                    wobbleStickOffset = ((Math.sin(t * 1.9) * 0.08) + (Math.cos(t * 3.8) * 0.04)) * normWobble;
                 }
 
-                let effectiveThrottleInput = Math.max(0, Math.min(1.0, this.currentThrottle + windThrottleOffset));
-                let effectiveStickYInput = Math.max(-1.0, Math.min(1.0, this.currentStickY + windStickOffset));
+                let effectiveThrottleInput = Math.max(0, Math.min(1.0, this.currentThrottle + wobbleThrottleOffset));
+                let effectiveStickYInput = Math.max(-1.0, Math.min(1.0, this.currentStickY + wobbleStickOffset));
 
                 // --- 5. FISICA DELL'ALTEZZA ---
                 let takeoffThreshold = 0.35; 
                 let effectiveThrottle = 0;
+                let maxFlightHeight = 2.42;
                 
                 if (effectiveThrottleInput > takeoffThreshold) {
                     effectiveThrottle = (effectiveThrottleInput - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                let targetHeliY = this.minHeliY + (effectiveThrottle * 2.42);
+                let targetHeliY = this.minHeliY + (effectiveThrottle * maxFlightHeight);
                 this.heliY += (targetHeliY - this.heliY) * dt * 4.0;
                 if (this.heliY < this.minHeliY) this.heliY = this.minHeliY;
 
@@ -289,9 +408,7 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 7. MOTO CIRCOLARE CON INERZIA E SCIVOLAMENTO RUOTE A TERRA ---
-                let isAirborne = this.heliY > (this.minHeliY + 0.005);
-
+                // --- 7. MOTO CIRCOLARE CON INERZIA ---
                 if (isAirborne) {
                     let targetSpeed = -speedFactor * effectiveThrottleInput * this.speedMultiplier;
 
@@ -310,7 +427,7 @@
                         }
                     }
                 } else {
-                    // SCIVOLAMENTO SULLE RUOTE A TERRA
+                    // SCIVOLAMENTO A TERRA
                     if (this.inertiaValue <= 0) {
                         this.angularVelocity = 0;
                     } else {
@@ -327,6 +444,47 @@
                 this.angle += this.angularVelocity * dt;
                 this.currentAngularSpeed = Math.abs(this.angularVelocity);
 
+                // Normalizzazione angolo 0 - 360
+                let normalizedAngle = ((this.angle % 360) + 360) % 360;
+
+                // --- CHECK ATTERRAGGIO SU PIATTAFORMA A SUD (UNDO LAST CUBE) ---
+                let southAngleDiff = Math.abs(normalizedAngle - 180);
+                if (southAngleDiff > 180) southAngleDiff = 360 - southAngleDiff;
+
+                if (!isAirborne && southAngleDiff < 8.0) {
+                    if (this.canUndo) {
+                        this.canUndo = false;
+                        this.popLastCubeFromSilo();
+                    }
+                } else if (southAngleDiff > 20.0 || isAirborne) {
+                    this.canUndo = true; // Riabilita l'undo quando ci si allontana o ci si alza
+                }
+
+                // --- CHECK ATTRAVERSAMENTO ANELLI ---
+                this.rings.forEach(ring => {
+                    let angleDiff = Math.abs(normalizedAngle - ring.angle);
+                    if (angleDiff > 180) angleDiff = 360 - angleDiff;
+
+                    let heightDiff = Math.abs(this.heliY - ring.height);
+
+                    // Tolleranza: 5 gradi e 0.25m in altezza
+                    if (angleDiff < 5.0 && heightDiff < 0.25) {
+                        if (!ring.passed) {
+                            ring.passed = true;
+                            this.spawnCubeInSilo(ring.color);
+                            
+                            let ringEl = document.querySelector(`#${ring.id}`);
+                            if (ringEl) ringEl.setAttribute('material', 'opacity: 0.4');
+                        }
+                    } else if (angleDiff > 25.0) {
+                        if (ring.passed) {
+                            ring.passed = false;
+                            let ringEl = document.querySelector(`#${ring.id}`);
+                            if (ringEl) ringEl.setAttribute('material', 'opacity: 0.9');
+                        }
+                    }
+                });
+
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
                 // --- 8. ROTAZIONE PALA PRINCIPALE ---
@@ -339,21 +497,17 @@
                     }
                 }
 
-                // --- 9. AUDIO DOPPIO (Motore + Wind Buzz) ---
+                // --- 9. AUDIO DOPPIO ---
                 if (this.audioInitialized && this.audioCtx) {
-                    // Motore (Tonatilità grave)
                     let targetFreq = 30 + (effectiveThrottleInput * 70);
                     let targetVolume = effectiveThrottleInput > 0.01 ? 0.18 : 0.0;
                     this.oscillator.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.1);
                     this.gainNode.gain.setTargetAtTime(targetVolume, this.audioCtx.currentTime, 0.1);
 
-                    // Wind Buzz (Fischio acuto proporzionale alla velocità angolare)
                     let normRadialSpeed = Math.min(1.0, this.currentAngularSpeed / 250.0);
-                    
-                    // Modulazione ad alte frequenze per renderlo acuto e ben distinto
-                    let targetWindOscFreq = 250 + (normRadialSpeed * 600);    // Range 250 Hz - 850 Hz
-                    let targetFilterFreq = 400 + (normRadialSpeed * 2400);   // Filter cutoff 400 Hz - 2800 Hz
-                    let targetWindVol = normRadialSpeed > 0.02 ? (normRadialSpeed * 0.38) : 0.0; // Volume alzato a 0.38
+                    let targetWindOscFreq = 250 + (normRadialSpeed * 600);    
+                    let targetFilterFreq = 400 + (normRadialSpeed * 2400);   
+                    let targetWindVol = normRadialSpeed > 0.02 ? (normRadialSpeed * 0.38) : 0.0; 
 
                     this.windOsc.frequency.setTargetAtTime(targetWindOscFreq, this.audioCtx.currentTime, 0.05);
                     this.windFilter.frequency.setTargetAtTime(targetFilterFreq, this.audioCtx.currentTime, 0.05);
@@ -392,7 +546,6 @@
     </div>
 
     <a-scene xr-mode-ui="enabled: true">
-        <!-- GESTIONE ASSET TEXTURE -->
         <a-assets>
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
@@ -407,17 +560,14 @@
             <!-- Base con texture JPG -->
             <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="src: #terrain-img; roughness: 0.8"></a-box>
             
-            <!-- STACCIONATA ARANCIONE SCURO INTORNO ALLA BASE -->
+            <!-- STACCIONATA ARANCIONE SCURO -->
             <a-entity id="fence">
                 <a-box position="-6 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
                 <a-box position="6 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
                 <a-box position="-6 0.3 6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="6 0.3 6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
 
                 <a-box position="0 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="0 0.3 6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
                 <a-box position="-6 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="6 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
 
                 <a-box position="0 0.18 -6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
                 <a-box position="0 0.45 -6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
@@ -434,6 +584,29 @@
 
             <!-- PERNO CENTRALE A CONO -->
             <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
+
+            <!-- SILOS A DESTRA DEL DIORAMA (X=5.2, Z=0) -->
+            <a-entity id="silo-station" position="5.2 0 0">
+                <a-cylinder position="0 0.2 0" radius="0.5" height="0.4" material="color: #37474F; roughness: 0.4"></a-cylinder>
+                <a-cylinder position="0 1.25 0" radius="0.32" height="1.7" material="color: #E0F7FA; opacity: 0.35; transparent: true; roughness: 0.1; side: double"></a-cylinder>
+                <a-entity id="silo-stack" position="0 0.4 0"></a-entity>
+            </a-entity>
+
+            <!-- PIATTAFORMA DI ATTERRAGGIO A SUD (ORE 6 - UNDO PLATFORM) -->
+            <a-entity id="south-station" position="0 0 4.5">
+                <a-cylinder position="0 0.2 0" radius="0.5" height="0.4" material="color: #FFEB3B; roughness: 0.4"></a-cylinder>
+                <a-text value="UNDO LANDING" position="0 0.45 0" rotation="-90 0 0" align="center" width="2.5" color="#000"></a-text>
+                
+                <!-- Ologramma Indicatore Sequenza Target -->
+                <a-entity id="target-display" position="0 0.4 0"></a-entity>
+            </a-entity>
+
+            <!-- 5 ANELLI COLORATI LUNGO IL PERCORSO -->
+            <a-torus id="ring-1" position="0 0.8 -4.5" radius="0.45" radius-tubular="0.02" material="color: #E53935; opacity: 0.9"></a-torus>
+            <a-torus id="ring-2" position="3.89 1.4 -2.25" rotation="0 -60 0" radius="0.45" radius-tubular="0.02" material="color: #4CAF50; opacity: 0.9"></a-torus>
+            <a-torus id="ring-3" position="3.89 2.1 2.25" rotation="0 -120 0" radius="0.45" radius-tubular="0.02" material="color: #1E88E5; opacity: 0.9"></a-torus>
+            <a-torus id="ring-4" position="-3.89 1.1 2.25" rotation="0 120 0" radius="0.45" radius-tubular="0.02" material="color: #8E24AA; opacity: 0.9"></a-torus>
+            <a-torus id="ring-5" position="-3.89 2.5 -2.25" rotation="0 60 0" radius="0.45" radius-tubular="0.02" material="color: #FB8C00; opacity: 0.9"></a-torus>
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
@@ -466,14 +639,10 @@
 
                             <!-- CARRELLO A RUOTE VERDI PARALLELE -->
                             <a-entity id="wheels-landing-gear">
-                                <!-- Gamba Sinistra -->
                                 <a-cylinder position="0.05 -0.24 -0.18" radius="0.015" height="0.16" material="color: #333"></a-cylinder>
-                                <!-- Ruota Verde Sinistra -->
                                 <a-cylinder position="0.05 -0.31 -0.21" radius="0.08" height="0.04" rotation="90 0 0" material="color: #2E7D32"></a-cylinder>
                                 
-                                <!-- Gamba Destra -->
                                 <a-cylinder position="0.05 -0.24 0.18" radius="0.015" height="0.16" material="color: #333"></a-cylinder>
-                                <!-- Ruota Verde Destra -->
                                 <a-cylinder position="0.05 -0.31 0.21" radius="0.08" height="0.04" rotation="90 0 0" material="color: #2E7D32"></a-cylinder>
                             </a-entity>
 
@@ -491,51 +660,40 @@
 
             <!-- PANNELLO MENÙ IN FORMATO VERTICALE 9:16 -->
             <a-entity id="menu-panel" position="-10.5 3.5 0" rotation="0 30 0" visible="true">
-                <!-- Sfondo Mappato 9:16 -->
                 <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                <!-- CONTROLLI NELLA PARTE INFERIORE -->
-                <!-- RIGA 1: SPEED (Y = -0.3) -->
+                <!-- RIGA 1: SPEED -->
                 <a-text value="Speed" position="-1.5 -0.3 0.05" align="left" width="5.5" color="#000000"></a-text>
-                
                 <a-plane id="btn-speed-dec" class="clickable" position="-0.3 -0.3 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
-                
                 <a-text id="menu-speed-val" value="90 deg/s" position="0.6 -0.3 0.05" align="center" width="4.5" color="#000000"></a-text>
-                
                 <a-plane id="btn-speed-inc" class="clickable" position="1.35 -0.3 0.05" width="0.4" height="0.4" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <!-- RIGA 2: WIND (Y = -1.0) -->
-                <a-text value="Wind" position="-1.5 -1.0 0.05" align="left" width="5.5" color="#000000"></a-text>
-                
+                <!-- RIGA 2: WOBBLING -->
+                <a-text value="Wobbling" position="-1.5 -1.0 0.05" align="left" width="5.5" color="#000000"></a-text>
                 <a-plane id="btn-wind-dec" class="clickable" position="-0.3 -1.0 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
-                
                 <a-text id="menu-wind-val" value="0" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
-                
                 <a-plane id="btn-wind-inc" class="clickable" position="1.35 -1.0 0.05" width="0.4" height="0.4" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <!-- RIGA 3: INERTIA (Y = -1.7) -->
+                <!-- RIGA 3: INERTIA -->
                 <a-text value="Inertia" position="-1.5 -1.7 0.05" align="left" width="5.5" color="#000000"></a-text>
-                
                 <a-plane id="btn-inertia-dec" class="clickable" position="-0.3 -1.7 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
-                
                 <a-text id="menu-inertia-val" value="20" position="0.6 -1.7 0.05" align="center" width="4.5" color="#000000"></a-text>
-                
                 <a-plane id="btn-inertia-inc" class="clickable" position="1.35 -1.7 0.05" width="0.4" height="0.4" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <!-- INDICATORE VERSIONE IN FONDO AL MENÙ (Y = -2.8) -->
-                <a-text id="menu-version-val" value="v1.7.1" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <!-- INDICATORE VERSIONE IN FONDO AL MENÙ -->
+                <a-text id="menu-version-val" value="v2.1.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->
@@ -543,11 +701,7 @@
         <!-- Camera e Giocatore -->
         <a-entity id="rig" position="0 0 0">
             <a-camera position="0 1.5 0"></a-camera>
-            
-            <!-- Controller Destro con Puntatore Laser abilitato per il Menu -->
             <a-entity id="right-hand" oculus-touch-controls="hand: right" raycaster="objects: .clickable" laser-controls="hand: right"></a-entity>
-            
-            <!-- Controller Sinistro per Gas (Grilletto) -->
             <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
         </a-entity>
     </a-scene>

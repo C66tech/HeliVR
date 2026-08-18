@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Proportional Menu v1.1.2</title>
+    <title>VertiVR Simulator - 9:16 Menu v1.1.3</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "1.1.2"; // Versione aggiornata
+                this.version = "1.1.3"; // Versione aggiornata
                 this.angle = 0;        
                 this.heliY = 0.31;     
                 this.radius = 4.5;     
@@ -350,10 +350,10 @@
     </div>
 
     <a-scene xr-mode-ui="enabled: true">
-        <!-- GESTIONE ASSET TEXTURE -->
+        <!-- GESTIONE ASSET TEXTURE (Nome esatto: VertiVRMemu.jpg) -->
         <a-assets>
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
-            <img id="menu-bg" src="VertiVRmenu.jpg" crossorigin="anonymous">
+            <img id="menu-bg" src="VertiVRMemu.jpg" crossorigin="anonymous">
         </a-assets>
 
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
@@ -442,42 +442,42 @@
                 </a-entity>
             </a-entity>
 
-            <!-- PANNELLO MENÙ PROPORZIONATO (16:9, LARGHEZZA=6.4, ALTEZZA=3.6) -->
-            <a-entity id="menu-panel" position="-11.5 2.5 0" rotation="0 30 0" visible="true">
-                <!-- Sfondo Mappato con Proporzioni 16:9 -->
-                <a-plane width="6.4" height="3.6" material="shader: flat; src: #menu-bg"></a-plane>
-                
-                <!-- IL 25% SUPERIORE (Y = da +0.9 a +1.8) È DEDICATO VISIVAMENTE AL LOGO NELL'IMMAGINE -->
+            <!-- PANNELLO MENÙ IN FORMATO VERTICALE 9:16 (LARGHEZZA=3.6, ALTEZZA=6.4) -->
+            <a-entity id="menu-panel" position="-10.5 3.5 0" rotation="0 30 0" visible="true">
+                <!-- Sfondo Mappato 9:16 -->
+                <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                <!-- CONTROLLI NELLA PARTE INFERIORE (75% DELLO SPAZIO) -->
-                <!-- RIGA 1: SPEED (Y = -0.1) -->
-                <a-text value="Speed" position="-2.4 -0.1 0.05" align="left" width="7" color="#FFF"></a-text>
-                
-                <a-plane id="btn-speed-dec" class="clickable" position="0.1 -0.1 0.05" width="0.5" height="0.5" color="#D32F2F">
-                    <a-text value="-" align="center" width="9" color="#FFF"></a-text>
-                </a-plane>
-                
-                <a-text id="menu-speed-val" value="90 deg/s" position="1.3 -0.1 0.05" align="center" width="6.5" color="#00FF66"></a-text>
-                
-                <a-plane id="btn-speed-inc" class="clickable" position="2.4 -0.1 0.05" width="0.5" height="0.5" color="#388E3C">
-                    <a-text value="+" align="center" width="9" color="#FFF"></a-text>
-                </a-plane>
+                <!-- IL 25% SUPERIORE (Y = da +1.6 a +3.2) È RISERVATO AL LOGO DELL'IMMAGINE -->
 
-                <!-- RIGA 2: WIND (Y = -0.9) -->
-                <a-text value="Wind" position="-2.4 -0.9 0.05" align="left" width="7" color="#FFF"></a-text>
+                <!-- CONTROLLI NELLA PARTE INFERIORE -->
+                <!-- RIGA 1: SPEED (Y = -0.5) -->
+                <a-text value="Speed" position="-1.3 -0.5 0.05" align="left" width="5.5" color="#FFF"></a-text>
                 
-                <a-plane id="btn-wind-dec" class="clickable" position="0.1 -0.9 0.05" width="0.5" height="0.5" color="#D32F2F">
-                    <a-text value="-" align="center" width="9" color="#FFF"></a-text>
+                <a-plane id="btn-speed-dec" class="clickable" position="0.1 -0.5 0.05" width="0.45" height="0.45" color="#D32F2F">
+                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
                 
-                <a-text id="menu-wind-val" value="0" position="1.3 -0.9 0.05" align="center" width="6.5" color="#00FF66"></a-text>
+                <a-text id="menu-speed-val" value="90 deg/s" position="0.9 -0.5 0.05" align="center" width="4.5" color="#00FF66"></a-text>
                 
-                <a-plane id="btn-wind-inc" class="clickable" position="2.4 -0.9 0.05" width="0.5" height="0.5" color="#388E3C">
-                    <a-text value="+" align="center" width="9" color="#FFF"></a-text>
+                <a-plane id="btn-speed-inc" class="clickable" position="1.3 -0.5 0.05" width="0.45" height="0.45" color="#388E3C">
+                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <!-- INDICATORE VERSIONE IN FONDO AL MENÙ (Y = -1.55) -->
-                <a-text id="menu-version-val" value="v1.1.2" position="0 -1.55 0.05" align="center" width="3.5" color="#AAAAAA"></a-text>
+                <!-- RIGA 2: WIND (Y = -1.4) -->
+                <a-text value="Wind" position="-1.3 -1.4 0.05" align="left" width="5.5" color="#FFF"></a-text>
+                
+                <a-plane id="btn-wind-dec" class="clickable" position="0.1 -1.4 0.05" width="0.45" height="0.45" color="#D32F2F">
+                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
+                
+                <a-text id="menu-wind-val" value="0" position="0.9 -1.4 0.05" align="center" width="4.5" color="#00FF66"></a-text>
+                
+                <a-plane id="btn-wind-inc" class="clickable" position="1.3 -1.4 0.05" width="0.45" height="0.45" color="#388E3C">
+                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
+
+                <!-- INDICATORE VERSIONE IN FONDO AL MENÙ (Y = -2.8) -->
+                <a-text id="menu-version-val" value="v1.1.3" position="0 -2.8 0.05" align="center" width="3.2" color="#AAAAAA"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

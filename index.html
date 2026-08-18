@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Ground Sliding Friction v1.4.0</title>
+    <title>VertiVR Simulator - Wheeled Landing Gear v1.5.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "1.4.0"; // Versione aggiornata
+                this.version = "1.5.0"; // Versione aggiornata
                 this.angle = 0;        
                 this.heliY = 0.31;     
                 this.radius = 4.5;     
@@ -24,7 +24,6 @@
                 this.inertiaValue = 20;    // Inerzia da 0 (nessuna) a 100 (massima)
 
                 this.rotorAngle = 0;
-                this.tailRotorAngle = 0;
                 this.currentAngularSpeed = 0; // Velocità radiale istantanea per l'audio
 
                 // Gestione World Root e Scala Iniziale
@@ -38,7 +37,6 @@
                 this.heliWrapperEl = document.querySelector('#heli-wrapper');
                 this.heliPitchEl = document.querySelector('#heli-pitch');
                 this.rotorEl = document.querySelector('#main-rotor');
-                this.tailRotorEl = document.querySelector('#tail-rotor');
                 this.rightHandEl = document.querySelector('#right-hand');
                 this.leftHandEl = document.querySelector('#left-hand');
 
@@ -290,7 +288,7 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 7. MOTO CIRCOLARE CON INERZIA E SCIVOLAMENTO A TERRA ---
+                // --- 7. MOTO CIRCOLARE CON INERZIA E SCIVOLAMENTO RUOTE A TERRA ---
                 let isAirborne = this.heliY > 0.315;
 
                 if (isAirborne) {
@@ -311,13 +309,12 @@
                         }
                     }
                 } else {
-                    // SCIVOLAMENTO A TERRA: l'attrito dei pattini smorza gradualmente la velocità accumulata
+                    // SCIVOLAMENTO SULLE RUOTE A TERRA: Attrito rotabile graduale
                     if (this.inertiaValue <= 0) {
                         this.angularVelocity = 0;
                     } else {
                         let inertiaFactor = this.inertiaValue / 100.0;
-                        // Meno inerzia c'è, più rapida è la frenata a terra
-                        let groundFriction = 3.0 + ((1.0 - inertiaFactor) * 10.0); 
+                        let groundFriction = 2.5 + ((1.0 - inertiaFactor) * 8.0); 
                         this.angularVelocity -= this.angularVelocity * groundFriction * dt;
 
                         if (Math.abs(this.angularVelocity) < 0.2) {
@@ -331,17 +328,13 @@
 
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // --- 8. ROTAZIONE PALE ---
+                // --- 8. ROTAZIONE PALA PRINCIPALE ---
                 if (this.currentThrottle > 0.01) {
                     let rotSpeed = effectiveThrottleInput * 4000; 
                     this.rotorAngle += rotSpeed * dt;
-                    this.tailRotorAngle += (rotSpeed * 2.5) * dt;
 
                     if (this.rotorEl) {
                         this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
-                    }
-                    if (this.tailRotorEl) {
-                        this.tailRotorEl.setAttribute('rotation', `${this.tailRotorAngle % 360} 0 0`);
                     }
                 }
 
@@ -460,22 +453,21 @@
                             <!-- Trave di Coda -->
                             <a-box position="-0.9 0.05 0" width="1.4" height="0.14" depth="0.2" material="color: #D32F2F"></a-box>
 
-                            <!-- Deriva verticale -->
+                            <!-- Deriva verticale (Timone) -->
                             <a-triangle vertex-a="0 0.3 0" vertex-b="-0.15 0 0" vertex-c="0.15 0 0" position="-1.55 0.25 0" rotation="0 0 -90" material="color: #D32F2F; side: double"></a-triangle>
 
-                            <!-- Rotore di Coda -->
-                            <a-entity position="-1.65 0.15 0" rotation="90 0 0">
-                                <a-cylinder radius="0.06" height="0.02" material="color: #FFCC00"></a-cylinder>
-                                <a-box id="tail-rotor" width="0.45" height="0.01" depth="0.07" color="#FFEB3B"></a-box>
+                            <!-- CARRELLO A RUOTE PARALLELE SOTTO IL CORPO PRINCIPALE -->
+                            <a-entity id="wheels-landing-gear">
+                                <!-- Gamba Sinistra -->
+                                <a-cylinder position="0.05 -0.24 -0.18" radius="0.015" height="0.16" material="color: #333"></a-cylinder>
+                                <!-- Ruota Sinistra -->
+                                <a-cylinder position="0.05 -0.31 -0.21" radius="0.08" height="0.04" rotation="90 0 0" material="color: #111"></a-cylinder>
+                                
+                                <!-- Gamba Destra -->
+                                <a-cylinder position="0.05 -0.24 0.18" radius="0.015" height="0.16" material="color: #333"></a-cylinder>
+                                <!-- Ruota Destra -->
+                                <a-cylinder position="0.05 -0.31 0.21" radius="0.08" height="0.04" rotation="90 0 0" material="color: #111"></a-cylinder>
                             </a-entity>
-
-                            <!-- Pattini e Montanti -->
-                            <a-box position="0.05 -0.31 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #388E3C"></a-box>
-                            <a-box position="0.05 -0.31 0.22" width="0.75" height="0.025" depth="0.035" material="color: #388E3C"></a-box>
-                            <a-box position="0.18 -0.16 -0.22" width="0.025" height="0.28" depth="0.02" rotation="0 0 15" material="color: #388E3C"></a-box>
-                            <a-box position="-0.12 -0.16 -0.22" width="0.025" height="0.28" depth="0.02" rotation="0 0 -15" material="color: #388E3C"></a-box>
-                            <a-box position="0.18 -0.16 0.22" width="0.025" height="0.28" depth="0.02" rotation="0 0 15" material="color: #388E3C"></a-box>
-                            <a-box position="-0.12 -0.16 0.22" width="0.025" height="0.28" depth="0.02" rotation="0 0 -15" material="color: #388E3C"></a-box>
 
                             <!-- Rotore Principale -->
                             <a-entity position="0 0.24 0">
@@ -535,7 +527,7 @@
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ (Y = -2.8) -->
-                <a-text id="menu-version-val" value="v1.4.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v1.5.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

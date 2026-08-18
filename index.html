@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Wind 150 & Speed Radial Buzz</title>
+    <title>VertiVR Simulator - Signboard on Center Pillar</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -90,7 +90,7 @@
                         this.windFilter = this.audioCtx.createBiquadFilter();
                         this.windFilter.type = 'bandpass';
                         this.windFilter.frequency.setValueAtTime(200, this.audioCtx.currentTime);
-                        this.windFilter.Q.setValueAtTime(3.0, this.audioCtx.currentTime); // Risonanza ventosa
+                        this.windFilter.Q.setValueAtTime(3.0, this.audioCtx.currentTime);
 
                         this.windGain = this.audioCtx.createGain();
                         this.windGain.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
@@ -143,7 +143,6 @@
                     this.updateMenuUI();
                 });
                 if (btnWindInc) btnWindInc.addEventListener('click', () => {
-                    // Limite Vento esteso a 150
                     this.windAmplitude = Math.min(150, this.windAmplitude + 10);
                     this.updateMenuUI();
                 });
@@ -305,11 +304,11 @@
                     this.gainNode.gain.setTargetAtTime(targetVolume, this.audioCtx.currentTime, 0.1);
 
                     // Wind Buzz proporzionale alla velocità radiale
-                    let normRadialSpeed = Math.min(1.0, this.currentAngularSpeed / 300.0); // 0 a 1
+                    let normRadialSpeed = Math.min(1.0, this.currentAngularSpeed / 300.0);
                     
-                    let targetWindOscFreq = 80 + (normRadialSpeed * 220);    // Frequenza fischio: 80Hz - 300Hz
-                    let targetFilterFreq = 150 + (normRadialSpeed * 1200);  // Banda passante: 150Hz - 1350Hz
-                    let targetWindVol = normRadialSpeed > 0.02 ? (normRadialSpeed * 0.22) : 0.0; // Volume fino a 0.22
+                    let targetWindOscFreq = 80 + (normRadialSpeed * 220);    
+                    let targetFilterFreq = 150 + (normRadialSpeed * 1200);  
+                    let targetWindVol = normRadialSpeed > 0.02 ? (normRadialSpeed * 0.22) : 0.0; 
 
                     this.windOsc.frequency.setTargetAtTime(targetWindOscFreq, this.audioCtx.currentTime, 0.08);
                     this.windFilter.frequency.setTargetAtTime(targetFilterFreq, this.audioCtx.currentTime, 0.08);
@@ -351,7 +350,7 @@
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- CONTENITORE GLOBALE DEL DIORAMA (Altezza Tavolo Y=0.8, Scala=0.06x) -->
+        <!-- CONTENITORE GLOBALE DEL DIORAMA -->
         <a-entity id="world-root" position="0 0.8 -0.8" rotation="0 0 0" scale="0.06 0.06 0.06">
             
             <!-- Base con texture JPG -->
@@ -382,8 +381,16 @@
                 <a-box position="6 0.45 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
             </a-entity>
 
-            <!-- Perno Centrale a Cono -->
-            <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
+            <!-- PERNO CENTRALE A CONO CON CARTELLO VertiVR.jpg -->
+            <a-entity id="center-pillar-group">
+                <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
+                
+                <!-- Palo del cartello -->
+                <a-cylinder position="0 1.45 0" radius="0.02" height="0.5" color="#555"></a-cylinder>
+                
+                <!-- Cartello principale a doppio lato in cima al perno -->
+                <a-plane position="0 1.75 0" width="1.6" height="0.8" material="src: url(VertiVR.jpg); side: double; roughness: 0.4"></a-plane>
+            </a-entity>
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
@@ -434,11 +441,11 @@
                 </a-entity>
             </a-entity>
 
-            <!-- PANNELLO MENÙ -->
+            <!-- PANNELLO MENÙ VertiVR -->
             <a-entity id="menu-panel" position="-11.5 2.5 0" rotation="0 30 0" visible="true">
                 <a-plane width="6.5" height="4.5" color="#1E1E1E" material="opacity: 0.95; transparent: true"></a-plane>
                 
-                <a-text value="IMPOSTAZIONI VOLO" position="0 1.6 0.05" align="center" width="9" color="#FFCC00"></a-text>
+                <a-text value="VERTIVR SETTINGS" position="0 1.6 0.05" align="center" width="9" color="#FFCC00"></a-text>
 
                 <!-- RIGA 1: SPEED -->
                 <a-text value="Speed" position="-2.6 0.5 0.05" align="left" width="8" color="#FFF"></a-text>

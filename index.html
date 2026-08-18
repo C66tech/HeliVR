@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Y Button & Compact Menu</title>
+    <title>VR Vertibird Simulator - Y-Axis Rotation Only</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -21,7 +21,7 @@
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
 
-                // Gestione World Root, Scaling (Inizio al 30% / 0.3x) e Grab
+                // Gestione World Root, Scaling e Grab
                 this.worldRoot = document.querySelector('#world-root');
                 this.currentScale = 0.3; 
                 this.isDragging = false;
@@ -44,7 +44,7 @@
                 this.menuVisible = false;
                 this.menuButtonPressedLastFrame = false;
 
-                // Imposta subito la scala iniziale bassa sul 3D
+                // Imposta scala iniziale bassa
                 if (this.worldRoot && this.worldRoot.object3D) {
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
@@ -143,7 +143,6 @@
                     this.updateMenuUI();
                 });
                 if (btnWindInc) btnWindInc.addEventListener('click', () => {
-                    // Aumentato limite massimo al 500% (5.0)
                     this.windAmplitude = Math.min(5.0, this.windAmplitude + 0.25);
                     this.updateMenuUI();
                 });
@@ -166,7 +165,6 @@
                         if (source.handedness === 'left' && source.gamepad) {
                             let gp = source.gamepad;
                             leftTrigger = gp.buttons[0] ? gp.buttons[0].value : 0;
-                            // Tasto Y (button 5)
                             yPressed = gp.buttons[5] ? gp.buttons[5].pressed : false;
                         }
                         if (source.handedness === 'right' && source.gamepad) {
@@ -204,7 +202,7 @@
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // --- 2. LOGICA GRAB DEL DIORAMA (GRIP DESTRO) ---
+                // --- 2. LOGICA GRAB DEL DIORAMA (SOLO ROTAZIONE Y) ---
                 if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
                     let handObj = this.rightHandEl.object3D;
                     
@@ -226,6 +224,10 @@
                             let s = new THREE.Vector3();
                             targetMatrix.decompose(p, q, s);
 
+                            // Mantiene la rotazione SOLO sull'asse Y (azzera inclinazioni X e Z)
+                            let euler = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+                            q.setFromEuler(new THREE.Euler(0, euler.y, 0, 'YXZ'));
+
                             this.worldRoot.object3D.position.copy(p);
                             this.worldRoot.object3D.quaternion.copy(q);
                             this.worldRoot.object3D.updateMatrixWorld(true);
@@ -239,7 +241,7 @@
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // --- 4. TURBOLENZE (Fino a 500%) ---
+                // --- 4. TURBOLENZE ---
                 let heightNoise = 0;
                 let pitchNoise = 0;
                 
@@ -340,7 +342,7 @@
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- CONTENITORE GLOBALE DEL DIORAMA (Partenza con scala bassa 0.3x) -->
+        <!-- CONTENITORE GLOBALE DEL DIORAMA -->
         <a-entity id="world-root" position="0 -0.3 -1.2" rotation="0 0 0" scale="0.3 0.3 0.3">
             
             <!-- Base con texture JPG -->
@@ -400,7 +402,7 @@
 
         </a-entity> <!-- /world-root -->
 
-        <!-- PANNELLO MENU 3D COMPATTO (RIDOTTO DEL 50% CON scale="0.5 0.5 0.5") -->
+        <!-- PANNELLO MENU 3D COMPATTO -->
         <a-entity id="menu-panel" position="0 1.5 -0.9" scale="0.5 0.5 0.5" visible="false">
             <a-plane width="1.1" height="0.8" color="#1E1E1E" material="opacity: 0.92; transparent: true"></a-plane>
             
@@ -433,7 +435,7 @@
         <a-entity id="rig" position="0 0 0">
             <a-camera position="0 1.5 0"></a-camera>
             
-            <!-- Controller Destro con Puntatore Laser abilitato per il Menu -->
+            <!-- Controller Destro per Menu Raycaster e Grip -->
             <a-entity id="right-hand" oculus-touch-controls="hand: right" raycaster="objects: .clickable" laser-controls="hand: right"></a-entity>
             
             <!-- Controller Sinistro per Gas (Grilletto) e Menu (Tasto Y) -->

@@ -2,12 +2,17 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Yellow Stinger & Smaller Spheres v2.6.0</title>
+    <!-- TAG META PER DISABILITARE LA CACHE E FORZARE IL RICARICAMENTO DAL SERVER -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <title>VertiVR Simulator - AR/VR Buttons & Anti-Cache v2.7.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "2.6.0"; 
+                this.version = "2.7.0"; 
                 this.angle = 0;        
                 this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
@@ -579,10 +584,8 @@
 
                     let sphereEl = document.querySelector(`#${s.id}`);
                     if (sphereEl && sphereEl.object3D) {
-                        // Distanza tra la punta del pungiglione e il centro della sfera
                         let distStingerToSphere = stingerLocalPos.distanceTo(sphereEl.object3D.position);
 
-                        // Soglia di contatto precisa per sfere ridotte (r=0.24 + tolleranza pungiglione)
                         if (distStingerToSphere < 0.30) {
                             this.spawnCubeInSilo(s.color);
                             this.triggerSphereExplosion(s);
@@ -620,13 +623,16 @@
         });
     </script>
     <style>
-        #ar-button-container {
+        /* CONTENITORE PULSANTI SEPARATI AR E VR */
+        #xr-button-container {
             position: fixed;
             bottom: 20px;
             right: 20px;
             z-index: 9999;
+            display: flex;
+            gap: 12px;
         }
-        .custom-ar-btn {
+        .custom-xr-btn {
             background-color: #2e7d32;
             color: white;
             border: 2px solid #4caf50;
@@ -636,19 +642,23 @@
             border-radius: 8px;
             cursor: pointer;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            transition: background 0.2s;
+            transition: background 0.2s, transform 0.1s;
         }
-        .custom-ar-btn:hover {
+        .custom-xr-btn:hover {
             background-color: #388e3c;
+            transform: scale(1.05);
         }
     </style>
 </head>
 <body>
-    <div id="ar-button-container">
-        <button class="custom-ar-btn" onclick="document.querySelector('a-scene').enterAR()">ENTRA IN AR (PASSTHROUGH)</button>
+    <!-- BARRA PULSANTI AFFIANCATI E SEPARATI -->
+    <div id="xr-button-container">
+        <button class="custom-xr-btn" onclick="document.querySelector('a-scene').enterAR()">AR</button>
+        <button class="custom-xr-btn" onclick="document.querySelector('a-scene').enterVR()">VR</button>
     </div>
 
-    <a-scene xr-mode-ui="enabled: true">
+    <!-- SCENA AFRAME CON INTERFACCIA NATIVA DISABILITATA PER EVITARE SOVRAPPOSIZIONI -->
+    <a-scene xr-mode-ui="enabled: false">
         <a-assets>
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
@@ -697,15 +707,12 @@
 
             <!-- PIATTAFORMA DI ATTERRAGGIO A SUD (ORE 6 - UNDO BUTTON MECCANICO A MOLLA) -->
             <a-entity id="south-station" position="0 0 4.5">
-                <!-- Base fissa di alloggiamento del pulsante -->
                 <a-cylinder position="0 0.04 0" radius="0.56" height="0.08" material="color: #212121; roughness: 0.8"></a-cylinder>
 
-                <!-- Gruppo Pulsante a Molla (Animato in Y al contatto) -->
                 <a-entity id="undo-btn-group" position="0 0 0">
                     <a-cylinder position="0 0.2 0" radius="0.5" height="0.4" material="color: #FFEB3B; roughness: 0.4"></a-cylinder>
                     <a-text value="UNDO LANDING" position="0 0.41 0" rotation="-90 0 0" align="center" width="2.5" color="#000"></a-text>
                     
-                    <!-- Ologramma Indicatore Sequenza Target -->
                     <a-entity id="target-display" position="0 0.4 0"></a-entity>
                 </a-entity>
             </a-entity>
@@ -806,7 +813,7 @@
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ -->
-                <a-text id="menu-version-val" value="v2.6.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v2.7.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

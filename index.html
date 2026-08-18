@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Clean Menu Layout</title>
+    <title>VR Vertibird Simulator - Gentle Wind Effect</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -204,14 +204,15 @@
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // --- 4. CALCOLO TURBOLENZE DEL VENTO (RANGE 0 - 100) ---
+                // --- 4. TURBOLENZE DEL VENTO MOLTO ATTENUATE ---
                 let windThrottleOffset = 0;
                 let windStickOffset = 0;
 
                 if (this.windAmplitude > 0) {
                     let normWind = this.windAmplitude / 100.0;
-                    windThrottleOffset = ((Math.sin(t * 2.3) * 0.3) + (Math.cos(t * 4.7) * 0.15) + (Math.sin(t * 7.1) * 0.08)) * normWind;
-                    windStickOffset = ((Math.sin(t * 1.9) * 0.6) + (Math.cos(t * 3.8) * 0.3) + (Math.sin(t * 6.3) * 0.15)) * normWind;
+                    // Coefficienti ridotti notevolmente per minimizzare l'invasività
+                    windThrottleOffset = ((Math.sin(t * 2.3) * 0.05) + (Math.cos(t * 4.7) * 0.025)) * normWind;
+                    windStickOffset = ((Math.sin(t * 1.9) * 0.08) + (Math.cos(t * 3.8) * 0.04)) * normWind;
                 }
 
                 let effectiveThrottleInput = Math.max(0, Math.min(1.0, this.currentThrottle + windThrottleOffset));
@@ -392,12 +393,10 @@
                 </a-entity>
             </a-entity>
 
-            <!-- PANNELLO MENÙ ORDINATO E BEN SPAZIATO (X = -11.5) -->
+            <!-- PANNELLO MENÙ -->
             <a-entity id="menu-panel" position="-11.5 2.5 0" rotation="0 30 0" visible="true">
-                <!-- Sfondo del Pannello -->
                 <a-plane width="6.5" height="4.5" color="#1E1E1E" material="opacity: 0.95; transparent: true"></a-plane>
                 
-                <!-- Titolo -->
                 <a-text value="IMPOSTAZIONI VOLO" position="0 1.6 0.05" align="center" width="9" color="#FFCC00"></a-text>
 
                 <!-- RIGA 1: SPEED -->

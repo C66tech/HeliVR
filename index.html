@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Short Body & Beacon Light v1.7.0</title>
+    <title>VertiVR Simulator - Enhanced Wind Buzz Sound v1.7.1</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "1.7.0"; // Versione aggiornata
+                this.version = "1.7.1"; // Versione aggiornata
                 this.angle = 0;        
                 this.heliY = 0.39;     // Quota minima alzata per non far affondare le ruote
                 this.minHeliY = 0.39;  
@@ -58,7 +58,7 @@
                 this.oscillator = null;
                 this.gainNode = null;
 
-                // 2. Audio "Wind Buzz" Radiale
+                // 2. Audio "Wind Buzz" Radiale (Fischio / Fruscio Aerodinamico)
                 this.windOsc = null;
                 this.windFilter = null;
                 this.windGain = null;
@@ -76,7 +76,7 @@
                         window.AudioContext = window.AudioContext || window.webkitAudioContext;
                         this.audioCtx = new AudioContext();
                         
-                        // Sintesi Motore
+                        // 1. Sintesi Motore (Grave / Sawtooth)
                         this.oscillator = this.audioCtx.createOscillator();
                         this.oscillator.type = 'sawtooth';
                         this.oscillator.frequency.setValueAtTime(30, this.audioCtx.currentTime);
@@ -88,15 +88,15 @@
                         this.gainNode.connect(this.audioCtx.destination);
                         this.oscillator.start();
 
-                        // Sintesi "Wind Buzz" (Fischio / Fruscio di velocità)
+                        // 2. Sintesi "Wind Buzz" (Acuta e Fischeggiante)
                         this.windOsc = this.audioCtx.createOscillator();
-                        this.windOsc.type = 'triangle'; 
-                        this.windOsc.frequency.setValueAtTime(100, this.audioCtx.currentTime);
+                        this.windOsc.type = 'sawtooth'; // Cambiato in sawtooth per più armoniche acute
+                        this.windOsc.frequency.setValueAtTime(250, this.audioCtx.currentTime);
 
                         this.windFilter = this.audioCtx.createBiquadFilter();
                         this.windFilter.type = 'bandpass';
-                        this.windFilter.frequency.setValueAtTime(200, this.audioCtx.currentTime);
-                        this.windFilter.Q.setValueAtTime(3.0, this.audioCtx.currentTime);
+                        this.windFilter.frequency.setValueAtTime(400, this.audioCtx.currentTime);
+                        this.windFilter.Q.setValueAtTime(4.0, this.audioCtx.currentTime); // Risonanza acuta
 
                         this.windGain = this.audioCtx.createGain();
                         this.windGain.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
@@ -341,22 +341,23 @@
 
                 // --- 9. AUDIO DOPPIO (Motore + Wind Buzz) ---
                 if (this.audioInitialized && this.audioCtx) {
-                    // Motore
+                    // Motore (Tonatilità grave)
                     let targetFreq = 30 + (effectiveThrottleInput * 70);
                     let targetVolume = effectiveThrottleInput > 0.01 ? 0.18 : 0.0;
                     this.oscillator.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.1);
                     this.gainNode.gain.setTargetAtTime(targetVolume, this.audioCtx.currentTime, 0.1);
 
-                    // Wind Buzz proporzionale alla velocità radiale reale da inerzia
-                    let normRadialSpeed = Math.min(1.0, this.currentAngularSpeed / 300.0);
+                    // Wind Buzz (Fischio acuto proporzionale alla velocità angolare)
+                    let normRadialSpeed = Math.min(1.0, this.currentAngularSpeed / 250.0);
                     
-                    let targetWindOscFreq = 80 + (normRadialSpeed * 220);    
-                    let targetFilterFreq = 150 + (normRadialSpeed * 1200);  
-                    let targetWindVol = normRadialSpeed > 0.02 ? (normRadialSpeed * 0.22) : 0.0; 
+                    // Modulazione ad alte frequenze per renderlo acuto e ben distinto
+                    let targetWindOscFreq = 250 + (normRadialSpeed * 600);    // Range 250 Hz - 850 Hz
+                    let targetFilterFreq = 400 + (normRadialSpeed * 2400);   // Filter cutoff 400 Hz - 2800 Hz
+                    let targetWindVol = normRadialSpeed > 0.02 ? (normRadialSpeed * 0.38) : 0.0; // Volume alzato a 0.38
 
-                    this.windOsc.frequency.setTargetAtTime(targetWindOscFreq, this.audioCtx.currentTime, 0.08);
-                    this.windFilter.frequency.setTargetAtTime(targetFilterFreq, this.audioCtx.currentTime, 0.08);
-                    this.windGain.gain.setTargetAtTime(targetWindVol, this.audioCtx.currentTime, 0.08);
+                    this.windOsc.frequency.setTargetAtTime(targetWindOscFreq, this.audioCtx.currentTime, 0.05);
+                    this.windFilter.frequency.setTargetAtTime(targetFilterFreq, this.audioCtx.currentTime, 0.05);
+                    this.windGain.gain.setTargetAtTime(targetWindVol, this.audioCtx.currentTime, 0.05);
                 }
             }
         });
@@ -534,7 +535,7 @@
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ (Y = -2.8) -->
-                <a-text id="menu-version-val" value="v1.7.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v1.7.1" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

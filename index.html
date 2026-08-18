@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Exploding Spheres & Audio Effects v2.3.0</title>
+    <title>VertiVR Simulator - Real 3D Vector Collision v2.4.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "2.3.0"; 
+                this.version = "2.4.0"; 
                 this.angle = 0;        
                 this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
@@ -54,13 +54,13 @@
                 this.targetSequence = [];
                 this.canUndo = true;
 
-                // Configurazione Sfere Colorate (Angoli, Altezze, Colore e Cooldown)
+                // Configurazione Sfere Colorate
                 this.spheres = [
-                    { id: 'sphere-1', angle: 0,   height: 0.8,  color: '#E53935', active: true, timer: null }, // Ore 12 (Rosso)
-                    { id: 'sphere-2', angle: 60,  height: 1.4,  color: '#4CAF50', active: true, timer: null }, // Ore 2 (Verde)
-                    { id: 'sphere-3', angle: 120, height: 2.1,  color: '#1E88E5', active: true, timer: null }, // Ore 4 (Blu)
-                    { id: 'sphere-4', angle: 240, height: 1.1,  color: '#8E24AA', active: true, timer: null }, // Ore 8 (Viola)
-                    { id: 'sphere-5', angle: 300, height: 2.5,  color: '#FB8C00', active: true, timer: null }  // Ore 10 (Arancione)
+                    { id: 'sphere-1', color: '#E53935', active: true, timer: null }, // Rosso
+                    { id: 'sphere-2', color: '#4CAF50', active: true, timer: null }, // Verde
+                    { id: 'sphere-3', color: '#1E88E5', active: true, timer: null }, // Blu
+                    { id: 'sphere-4', color: '#8E24AA', active: true, timer: null }, // Viola
+                    { id: 'sphere-5', color: '#FB8C00', active: true, timer: null }  // Arancione
                 ];
 
                 // Elementi Menu
@@ -136,8 +136,7 @@
                     if (!this.audioCtx) return;
                     try {
                         let now = this.audioCtx.currentTime;
-                        // Generazione Rumore Bianco per Esplosione Bang
-                        let bufferSize = this.audioCtx.sampleRate * 0.2; 
+                        let bufferSize = this.audioCtx.sampleRate * 0.18; 
                         let buffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
                         let data = buffer.getChannelData(0);
                         for (let i = 0; i < bufferSize; i++) {
@@ -148,12 +147,12 @@
 
                         let filter = this.audioCtx.createBiquadFilter();
                         filter.type = 'lowpass';
-                        filter.frequency.setValueAtTime(800, now);
-                        filter.frequency.exponentialRampToValueAtTime(80, now + 0.2);
+                        filter.frequency.setValueAtTime(900, now);
+                        filter.frequency.exponentialRampToValueAtTime(60, now + 0.18);
 
                         let gain = this.audioCtx.createGain();
-                        gain.gain.setValueAtTime(0.8, now);
-                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                        gain.gain.setValueAtTime(0.85, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
 
                         noise.connect(filter);
                         filter.connect(gain);
@@ -170,17 +169,16 @@
                         let gain = this.audioCtx.createGain();
 
                         osc.type = 'sine';
-                        // Glissando ascendente rapido da 150Hz a 450Hz
-                        osc.frequency.setValueAtTime(150, now);
-                        osc.frequency.exponentialRampToValueAtTime(450, now + 0.12);
+                        osc.frequency.setValueAtTime(160, now);
+                        osc.frequency.exponentialRampToValueAtTime(480, now + 0.1);
 
                         gain.gain.setValueAtTime(0.5, now);
-                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
 
                         osc.connect(gain);
                         gain.connect(this.audioCtx.destination);
                         osc.start(now);
-                        osc.stop(now + 0.12);
+                        osc.stop(now + 0.1);
                     } catch(e) {}
                 };
 
@@ -329,23 +327,20 @@
                 }
             },
 
-            // --- ESPLOSIONE E RIGENERAZIONE SFERA (5 SECONDI) ---
+            // --- ESPLOSIONE E RIGENERAZIONE SFERA ---
             triggerSphereExplosion: function(sphereObj) {
                 sphereObj.active = false;
                 let sphereEl = document.querySelector(`#${sphereObj.id}`);
                 
-                // Suono BANG + scomparsa immediata
                 this.playBangSound();
                 if (sphereEl) {
                     sphereEl.setAttribute('visible', 'false');
-                    sphereEl.setAttribute('radius', '0.01'); // Riduzione visiva per evitare interazioni fantasma
                 }
 
-                // Rigenerazione dopo 5 secondi con suono PLOP
+                // Rigenerazione dopo 5 secondi
                 sphereObj.timer = setTimeout(() => {
                     sphereObj.active = true;
                     if (sphereEl) {
-                        sphereEl.setAttribute('radius', '0.35');
                         sphereEl.setAttribute('visible', 'true');
                         this.playPlopSound();
                     }
@@ -512,39 +507,43 @@
                 this.angle += this.angularVelocity * dt;
                 this.currentAngularSpeed = Math.abs(this.angularVelocity);
 
-                // Normalizzazione angolo 0 - 360
-                let normalizedAngle = ((this.angle % 360) + 360) % 360;
+                this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // --- CHECK ATTERRAGGIO SU PIATTAFORMA A SUD (UNDO LAST CUBE) ---
-                let southAngleDiff = Math.abs(normalizedAngle - 180);
-                if (southAngleDiff > 180) southAngleDiff = 360 - southAngleDiff;
+                // --- CALCOLO POSIZIONE 3D REALE DEL VERTIBIRD ---
+                let heliLocalPos = new THREE.Vector3();
+                if (this.heliPitchEl && this.heliPitchEl.object3D && this.worldRoot && this.worldRoot.object3D) {
+                    this.heliPitchEl.object3D.getWorldPosition(heliLocalPos);
+                    this.worldRoot.object3D.worldToLocal(heliLocalPos);
+                }
 
-                if (!isAirborne && southAngleDiff < 8.0) {
+                // --- CHECK ATTERRAGGIO SU PIATTAFORMA A SUD (UNDO PLATFORM) ---
+                let southPos = new THREE.Vector3(0, 0.2, 4.5);
+                let distToSouth = heliLocalPos.distanceTo(southPos);
+
+                if (!isAirborne && distToSouth < 0.8) {
                     if (this.canUndo) {
                         this.canUndo = false;
                         this.popLastCubeFromSilo();
                     }
-                } else if (southAngleDiff > 20.0 || isAirborne) {
+                } else if (distToSouth > 1.2 || isAirborne) {
                     this.canUndo = true; 
                 }
 
-                // --- CHECK COLLISIONE IMMEDIATA CON SFERE COLORATE ---
+                // --- CHECK COLLISIONE REALE 3D CON SFERE COLORATE ---
                 this.spheres.forEach(s => {
                     if (!s.active) return; 
 
-                    let angleDiff = Math.abs(normalizedAngle - s.angle);
-                    if (angleDiff > 180) angleDiff = 360 - angleDiff;
+                    let sphereEl = document.querySelector(`#${s.id}`);
+                    if (sphereEl && sphereEl.object3D) {
+                        let distToSphere = heliLocalPos.distanceTo(sphereEl.object3D.position);
 
-                    let heightDiff = Math.abs(this.heliY - s.height);
-
-                    // Tolleranza d'impatto reattiva
-                    if (angleDiff < 6.0 && heightDiff < 0.35) {
-                        this.spawnCubeInSilo(s.color);
-                        this.triggerSphereExplosion(s);
+                        // Impatto metrico reale (Soglia < 0.55m nello spazio locale)
+                        if (distToSphere < 0.55) {
+                            this.spawnCubeInSilo(s.color);
+                            this.triggerSphereExplosion(s);
+                        }
                     }
                 });
-
-                this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
                 // --- 8. ROTAZIONE PALA PRINCIPALE ---
                 if (this.currentThrottle > 0.01) {
@@ -752,7 +751,7 @@
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ -->
-                <a-text id="menu-version-val" value="v2.3.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v2.4.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

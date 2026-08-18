@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Interactive Spheres & Cooldown v2.2.0</title>
+    <title>VertiVR Simulator - Exploding Spheres & Audio Effects v2.3.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "2.2.0"; 
+                this.version = "2.3.0"; 
                 this.angle = 0;        
                 this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
@@ -76,7 +76,7 @@
                 // Generazione Schema Obiettivo Iniziale
                 this.generateLevelTarget();
 
-                // --- SISTEMA AUDIO DOPPIO ---
+                // --- SISTEMA AUDIO WEB AUDIO API ---
                 this.audioCtx = null;
                 this.oscillator = null;
                 this.gainNode = null;
@@ -130,6 +130,59 @@
 
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
+
+                // --- EFFETTI SONORI SINTETIZZATI (BANG & PLOP) ---
+                this.playBangSound = () => {
+                    if (!this.audioCtx) return;
+                    try {
+                        let now = this.audioCtx.currentTime;
+                        // Generazione Rumore Bianco per Esplosione Bang
+                        let bufferSize = this.audioCtx.sampleRate * 0.2; 
+                        let buffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+                        let data = buffer.getChannelData(0);
+                        for (let i = 0; i < bufferSize; i++) {
+                            data[i] = Math.random() * 2 - 1;
+                        }
+                        let noise = this.audioCtx.createBufferSource();
+                        noise.buffer = buffer;
+
+                        let filter = this.audioCtx.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.frequency.setValueAtTime(800, now);
+                        filter.frequency.exponentialRampToValueAtTime(80, now + 0.2);
+
+                        let gain = this.audioCtx.createGain();
+                        gain.gain.setValueAtTime(0.8, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+
+                        noise.connect(filter);
+                        filter.connect(gain);
+                        gain.connect(this.audioCtx.destination);
+                        noise.start(now);
+                    } catch(e) {}
+                };
+
+                this.playPlopSound = () => {
+                    if (!this.audioCtx) return;
+                    try {
+                        let now = this.audioCtx.currentTime;
+                        let osc = this.audioCtx.createOscillator();
+                        let gain = this.audioCtx.createGain();
+
+                        osc.type = 'sine';
+                        // Glissando ascendente rapido da 150Hz a 450Hz
+                        osc.frequency.setValueAtTime(150, now);
+                        osc.frequency.exponentialRampToValueAtTime(450, now + 0.12);
+
+                        gain.gain.setValueAtTime(0.5, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+
+                        osc.connect(gain);
+                        gain.connect(this.audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.12);
+                    } catch(e) {}
+                };
 
                 // --- SCALING CON TASTI A E B ---
                 const applyScale = (delta) => {
@@ -186,7 +239,6 @@
                 this.updateMenuUI();
             },
 
-            // Genera la sequenza target per il livello attuale
             generateLevelTarget: function() {
                 this.targetSequence = [];
                 let targetLength = Math.min(5, 2 + this.currentLevel);
@@ -198,7 +250,6 @@
                 this.renderTargetDisplay();
             },
 
-            // Visualizza gli indicatori target sul pannello ologramma a sud
             renderTargetDisplay: function() {
                 if (!this.targetDisplayEl) return;
                 this.targetDisplayEl.innerHTML = '';
@@ -221,7 +272,6 @@
                 });
             },
 
-            // Aggiunge un cubetto nel Silos sul lato destro
             spawnCubeInSilo: function(color) {
                 if (!this.siloStackEl) return;
 
@@ -242,7 +292,6 @@
                 this.checkLevelCompletion();
             },
 
-            // Sfila l'ultimo cubo inserito (Azione Undo toccando la piattaforma)
             popLastCubeFromSilo: function() {
                 if (this.stackedCubes.length === 0) return;
 
@@ -253,7 +302,6 @@
                 }
             },
 
-            // Verifica se la pila corrisponde all'obiettivo
             checkLevelCompletion: function() {
                 if (this.stackedColors.length < this.targetSequence.length) return;
 
@@ -281,24 +329,27 @@
                 }
             },
 
-            // Innesca il Cooldown di 3 secondi per la sfera colpita
-            triggerSphereCooldown: function(sphereObj) {
+            // --- ESPLOSIONE E RIGENERAZIONE SFERA (5 SECONDI) ---
+            triggerSphereExplosion: function(sphereObj) {
                 sphereObj.active = false;
                 let sphereEl = document.querySelector(`#${sphereObj.id}`);
                 
+                // Suono BANG + scomparsa immediata
+                this.playBangSound();
                 if (sphereEl) {
-                    // Imposta il colore grigio per indicare l'inattività
-                    sphereEl.setAttribute('material', 'color: #757575; opacity: 0.5');
+                    sphereEl.setAttribute('visible', 'false');
+                    sphereEl.setAttribute('radius', '0.01'); // Riduzione visiva per evitare interazioni fantasma
                 }
 
-                // Timer di 3 secondi
+                // Rigenerazione dopo 5 secondi con suono PLOP
                 sphereObj.timer = setTimeout(() => {
                     sphereObj.active = true;
                     if (sphereEl) {
-                        // Ripristina il colore originale
-                        sphereEl.setAttribute('material', `color: ${sphereObj.color}; opacity: 0.95`);
+                        sphereEl.setAttribute('radius', '0.35');
+                        sphereEl.setAttribute('visible', 'true');
+                        this.playPlopSound();
                     }
-                }, 3000);
+                }, 5000);
             },
 
             tick: function (time, delta) {
@@ -445,7 +496,6 @@
                         }
                     }
                 } else {
-                    // SCIVOLAMENTO A TERRA
                     if (this.inertiaValue <= 0) {
                         this.angularVelocity = 0;
                     } else {
@@ -478,19 +528,19 @@
                     this.canUndo = true; 
                 }
 
-                // --- CHECK COLLISIONE CON SFERE COLORATE ---
+                // --- CHECK COLLISIONE IMMEDIATA CON SFERE COLORATE ---
                 this.spheres.forEach(s => {
-                    if (!s.active) return; // Se la sfera è in cooldown grigio, viene ignorata
+                    if (!s.active) return; 
 
                     let angleDiff = Math.abs(normalizedAngle - s.angle);
                     if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
                     let heightDiff = Math.abs(this.heliY - s.height);
 
-                    // Tolleranza d'impatto: 6 gradi e 0.3m in altezza
-                    if (angleDiff < 6.0 && heightDiff < 0.3) {
+                    // Tolleranza d'impatto reattiva
+                    if (angleDiff < 6.0 && heightDiff < 0.35) {
                         this.spawnCubeInSilo(s.color);
-                        this.triggerSphereCooldown(s);
+                        this.triggerSphereExplosion(s);
                     }
                 });
 
@@ -702,7 +752,7 @@
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ -->
-                <a-text id="menu-version-val" value="v2.2.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v2.3.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

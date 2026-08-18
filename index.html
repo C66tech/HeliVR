@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Puzzle Mode & Undo Platform v2.1.0</title>
+    <title>VertiVR Simulator - Interactive Spheres & Cooldown v2.2.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "2.1.0"; 
+                this.version = "2.2.0"; 
                 this.angle = 0;        
                 this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
@@ -54,13 +54,13 @@
                 this.targetSequence = [];
                 this.canUndo = true;
 
-                // Configurazione Anelli (Angoli e Altezze)
-                this.rings = [
-                    { id: 'ring-1', angle: 0,   height: 0.8,  color: '#E53935', passed: false }, // Ore 12 (Rosso)
-                    { id: 'ring-2', angle: 60,  height: 1.4,  color: '#4CAF50', passed: false }, // Ore 2 (Verde)
-                    { id: 'ring-3', angle: 120, height: 2.1,  color: '#1E88E5', passed: false }, // Ore 4 (Blu)
-                    { id: 'ring-4', angle: 240, height: 1.1,  color: '#8E24AA', passed: false }, // Ore 8 (Viola)
-                    { id: 'ring-5', angle: 300, height: 2.5,  color: '#FB8C00', passed: false }  // Ore 10 (Arancione)
+                // Configurazione Sfere Colorate (Angoli, Altezze, Colore e Cooldown)
+                this.spheres = [
+                    { id: 'sphere-1', angle: 0,   height: 0.8,  color: '#E53935', active: true, timer: null }, // Ore 12 (Rosso)
+                    { id: 'sphere-2', angle: 60,  height: 1.4,  color: '#4CAF50', active: true, timer: null }, // Ore 2 (Verde)
+                    { id: 'sphere-3', angle: 120, height: 2.1,  color: '#1E88E5', active: true, timer: null }, // Ore 4 (Blu)
+                    { id: 'sphere-4', angle: 240, height: 1.1,  color: '#8E24AA', active: true, timer: null }, // Ore 8 (Viola)
+                    { id: 'sphere-5', angle: 300, height: 2.5,  color: '#FB8C00', active: true, timer: null }  // Ore 10 (Arancione)
                 ];
 
                 // Elementi Menu
@@ -189,7 +189,6 @@
             // Genera la sequenza target per il livello attuale
             generateLevelTarget: function() {
                 this.targetSequence = [];
-                // La lunghezza della sequenza cresce con il livello (es. 3, 4, 5 cubi)
                 let targetLength = Math.min(5, 2 + this.currentLevel);
 
                 for (let i = 0; i < targetLength; i++) {
@@ -267,7 +266,6 @@
                 }
 
                 if (isCorrect) {
-                    // LIVELLO SUPERATO!
                     setTimeout(() => {
                         alert(`LIVELLO ${this.currentLevel} SUPERATO!`);
                         this.currentLevel++;
@@ -281,6 +279,26 @@
                 while (this.stackedCubes.length > 0) {
                     this.popLastCubeFromSilo();
                 }
+            },
+
+            // Innesca il Cooldown di 3 secondi per la sfera colpita
+            triggerSphereCooldown: function(sphereObj) {
+                sphereObj.active = false;
+                let sphereEl = document.querySelector(`#${sphereObj.id}`);
+                
+                if (sphereEl) {
+                    // Imposta il colore grigio per indicare l'inattività
+                    sphereEl.setAttribute('material', 'color: #757575; opacity: 0.5');
+                }
+
+                // Timer di 3 secondi
+                sphereObj.timer = setTimeout(() => {
+                    sphereObj.active = true;
+                    if (sphereEl) {
+                        // Ripristina il colore originale
+                        sphereEl.setAttribute('material', `color: ${sphereObj.color}; opacity: 0.95`);
+                    }
+                }, 3000);
             },
 
             tick: function (time, delta) {
@@ -457,31 +475,22 @@
                         this.popLastCubeFromSilo();
                     }
                 } else if (southAngleDiff > 20.0 || isAirborne) {
-                    this.canUndo = true; // Riabilita l'undo quando ci si allontana o ci si alza
+                    this.canUndo = true; 
                 }
 
-                // --- CHECK ATTRAVERSAMENTO ANELLI ---
-                this.rings.forEach(ring => {
-                    let angleDiff = Math.abs(normalizedAngle - ring.angle);
+                // --- CHECK COLLISIONE CON SFERE COLORATE ---
+                this.spheres.forEach(s => {
+                    if (!s.active) return; // Se la sfera è in cooldown grigio, viene ignorata
+
+                    let angleDiff = Math.abs(normalizedAngle - s.angle);
                     if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
-                    let heightDiff = Math.abs(this.heliY - ring.height);
+                    let heightDiff = Math.abs(this.heliY - s.height);
 
-                    // Tolleranza: 5 gradi e 0.25m in altezza
-                    if (angleDiff < 5.0 && heightDiff < 0.25) {
-                        if (!ring.passed) {
-                            ring.passed = true;
-                            this.spawnCubeInSilo(ring.color);
-                            
-                            let ringEl = document.querySelector(`#${ring.id}`);
-                            if (ringEl) ringEl.setAttribute('material', 'opacity: 0.4');
-                        }
-                    } else if (angleDiff > 25.0) {
-                        if (ring.passed) {
-                            ring.passed = false;
-                            let ringEl = document.querySelector(`#${ring.id}`);
-                            if (ringEl) ringEl.setAttribute('material', 'opacity: 0.9');
-                        }
+                    // Tolleranza d'impatto: 6 gradi e 0.3m in altezza
+                    if (angleDiff < 6.0 && heightDiff < 0.3) {
+                        this.spawnCubeInSilo(s.color);
+                        this.triggerSphereCooldown(s);
                     }
                 });
 
@@ -601,12 +610,12 @@
                 <a-entity id="target-display" position="0 0.4 0"></a-entity>
             </a-entity>
 
-            <!-- 5 ANELLI COLORATI LUNGO IL PERCORSO -->
-            <a-torus id="ring-1" position="0 0.8 -4.5" radius="0.45" radius-tubular="0.02" material="color: #E53935; opacity: 0.9"></a-torus>
-            <a-torus id="ring-2" position="3.89 1.4 -2.25" rotation="0 -60 0" radius="0.45" radius-tubular="0.02" material="color: #4CAF50; opacity: 0.9"></a-torus>
-            <a-torus id="ring-3" position="3.89 2.1 2.25" rotation="0 -120 0" radius="0.45" radius-tubular="0.02" material="color: #1E88E5; opacity: 0.9"></a-torus>
-            <a-torus id="ring-4" position="-3.89 1.1 2.25" rotation="0 120 0" radius="0.45" radius-tubular="0.02" material="color: #8E24AA; opacity: 0.9"></a-torus>
-            <a-torus id="ring-5" position="-3.89 2.5 -2.25" rotation="0 60 0" radius="0.45" radius-tubular="0.02" material="color: #FB8C00; opacity: 0.9"></a-torus>
+            <!-- 5 SFERE COLORATE LUNGO IL PERCORSO -->
+            <a-sphere id="sphere-1" position="0 0.8 -4.5" radius="0.35" material="color: #E53935; opacity: 0.95; roughness: 0.2"></a-sphere>
+            <a-sphere id="sphere-2" position="3.89 1.4 -2.25" radius="0.35" material="color: #4CAF50; opacity: 0.95; roughness: 0.2"></a-sphere>
+            <a-sphere id="sphere-3" position="3.89 2.1 2.25" radius="0.35" material="color: #1E88E5; opacity: 0.95; roughness: 0.2"></a-sphere>
+            <a-sphere id="sphere-4" position="-3.89 1.1 2.25" radius="0.35" material="color: #8E24AA; opacity: 0.95; roughness: 0.2"></a-sphere>
+            <a-sphere id="sphere-5" position="-3.89 2.5 -2.25" radius="0.35" material="color: #FB8C00; opacity: 0.95; roughness: 0.2"></a-sphere>
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
@@ -693,7 +702,7 @@
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ -->
-                <a-text id="menu-version-val" value="v2.1.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v2.2.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

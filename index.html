@@ -2,11 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Signboard on Center Pillar</title>
+    <title>VertiVR Simulator - Custom Menu Background</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
+                this.version = "1.1.0"; // Versione del gioco
                 this.angle = 0;        
                 this.heliY = 0.31;     
                 this.radius = 4.5;     
@@ -40,6 +41,7 @@
                 // Elementi Menu
                 this.speedText = document.querySelector('#menu-speed-val');
                 this.windText = document.querySelector('#menu-wind-val');
+                this.versionText = document.querySelector('#menu-version-val');
 
                 if (this.worldRoot && this.worldRoot.object3D) {
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
@@ -123,6 +125,7 @@
                 this.updateMenuUI = () => {
                     if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
                     if (this.windText) this.windText.setAttribute('value', `${this.windAmplitude.toFixed(0)}`);
+                    if (this.versionText) this.versionText.setAttribute('value', `v${this.version}`);
                 };
 
                 let btnSpeedDec = document.querySelector('#btn-speed-dec');
@@ -381,16 +384,8 @@
                 <a-box position="6 0.45 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
             </a-entity>
 
-            <!-- PERNO CENTRALE A CONO CON CARTELLO VertiVR.jpg -->
-            <a-entity id="center-pillar-group">
-                <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
-                
-                <!-- Palo del cartello -->
-                <a-cylinder position="0 1.45 0" radius="0.02" height="0.5" color="#555"></a-cylinder>
-                
-                <!-- Cartello principale a doppio lato in cima al perno -->
-                <a-plane position="0 1.75 0" width="1.6" height="0.8" material="src: url(VertiVR.jpg); side: double; roughness: 0.4"></a-plane>
-            </a-entity>
+            <!-- PERNO CENTRALE A CONO -->
+            <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
@@ -441,9 +436,10 @@
                 </a-entity>
             </a-entity>
 
-            <!-- PANNELLO MENÙ VertiVR -->
+            <!-- PANNELLO MENÙ VertiVR CON BACKGROUND VertiVRmenu.jpg E VERSIONE -->
             <a-entity id="menu-panel" position="-11.5 2.5 0" rotation="0 30 0" visible="true">
-                <a-plane width="6.5" height="4.5" color="#1E1E1E" material="opacity: 0.95; transparent: true"></a-plane>
+                <!-- Sfondo Mappato con VertiVRmenu.jpg -->
+                <a-plane width="6.5" height="4.5" material="src: url(VertiVRmenu.jpg); roughness: 0.5"></a-plane>
                 
                 <a-text value="VERTIVR SETTINGS" position="0 1.6 0.05" align="center" width="9" color="#FFCC00"></a-text>
 
@@ -472,6 +468,9 @@
                 <a-plane id="btn-wind-inc" class="clickable" position="2.6 -0.6 0.05" width="0.6" height="0.6" color="#388E3C">
                     <a-text value="+" align="center" width="10" color="#FFF"></a-text>
                 </a-plane>
+
+                <!-- INDICATORE VERSIONE IN FONDO -->
+                <a-text id="menu-version-val" value="v1.1.0" position="0 -1.9 0.05" align="center" width="4" color="#AAAAAA"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

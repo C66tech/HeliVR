@@ -7,12 +7,12 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - AR/VR Buttons & Anti-Cache v2.7.0</title>
+    <title>VertiVR Simulator - Ultra-flat Undo Disc & Takeoff Cooldown v2.8.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "2.7.0"; 
+                this.version = "2.8.0"; 
                 this.angle = 0;        
                 this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
@@ -32,8 +32,9 @@
                 this.rotorAngle = 0;
                 this.currentAngularSpeed = 0; 
 
-                // Escursione Pulsante a Molla
-                this.buttonYOffset = 0;
+                // Gestione Stato Undo: 'READY', 'USED', 'COOLDOWN'
+                this.undoState = 'READY';
+                this.undoTimer = null;
 
                 // Gestione World Root
                 this.worldRoot = document.querySelector('#world-root');
@@ -53,6 +54,7 @@
                 // Elementi Silos, Pila e Target
                 this.siloStackEl = document.querySelector('#silo-stack');
                 this.targetDisplayEl = document.querySelector('#target-display');
+                this.undoCylinderEl = document.querySelector('#undo-cylinder');
                 this.stackedCubes = [];
                 this.stackedColors = [];
                 this.cubeHeight = 0.25;
@@ -61,7 +63,6 @@
                 this.currentLevel = 1;
                 this.availableColors = ['#E53935', '#4CAF50', '#1E88E5', '#8E24AA', '#FB8C00'];
                 this.targetSequence = [];
-                this.canUndo = true;
 
                 // Configurazione Sfere Colorate
                 this.spheres = [
@@ -478,28 +479,36 @@
                 let distToSouth = heliLocalPos.distanceTo(southPos);
                 let isOverSouth = (distToSouth < 0.85);
 
-                // --- FISICA DELLA PIATTAFORMA UNDO A MOLLA ---
-                let targetButtonOffset = 0;
-                let isAirborne = this.heliY > (this.minHeliY + this.buttonYOffset + 0.008);
+                // --- 4. WOBBLING E VOLO ---
+                let isAirborne = this.heliY > (this.minHeliY + 0.008);
 
+                // LOGICA UNDO CON DISCO ULTRA-SOTTILE E COOLDOWN DA 3 SECONDI DAL DECOLLO
                 if (isOverSouth && !isAirborne) {
-                    targetButtonOffset = -0.08; 
-                    if (this.canUndo) {
-                        this.canUndo = false;
+                    if (this.undoState === 'READY') {
+                        this.undoState = 'USED';
                         this.popLastCubeFromSilo();
-                        this.playClickSound(); 
+                        this.playClickSound();
+                        
+                        if (this.undoCylinderEl) {
+                            this.undoCylinderEl.setAttribute('material', 'color: #757575; roughness: 0.6');
+                        }
                     }
-                } else if (distToSouth > 1.2 || isAirborne) {
-                    this.canUndo = true; 
+                } else {
+                    // Quando l'elicottero DECOLLA o si allontana dalla piattaforma
+                    if (this.undoState === 'USED') {
+                        this.undoState = 'COOLDOWN';
+                        if (this.undoTimer) clearTimeout(this.undoTimer);
+                        
+                        // Timer di 3 secondi DAL DECOLLO per riattivare il bottone
+                        this.undoTimer = setTimeout(() => {
+                            this.undoState = 'READY';
+                            if (this.undoCylinderEl) {
+                                this.undoCylinderEl.setAttribute('material', 'color: #FFEB3B; roughness: 0.4');
+                            }
+                        }, 3000);
+                    }
                 }
 
-                this.buttonYOffset += (targetButtonOffset - this.buttonYOffset) * dt * 12.0;
-                let btnGroup = document.querySelector('#undo-btn-group');
-                if (btnGroup) {
-                    btnGroup.setAttribute('position', `0 ${this.buttonYOffset} 0`);
-                }
-
-                // --- 4. WOBBLING ---
                 let wobbleThrottleOffset = 0;
                 let wobbleStickOffset = 0;
 
@@ -521,10 +530,9 @@
                     effectiveThrottle = (effectiveThrottleInput - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                let currentBaseY = isOverSouth ? (this.minHeliY + this.buttonYOffset) : this.minHeliY;
-                let targetHeliY = currentBaseY + (effectiveThrottle * maxFlightHeight);
+                let targetHeliY = this.minHeliY + (effectiveThrottle * maxFlightHeight);
                 this.heliY += (targetHeliY - this.heliY) * dt * 6.0;
-                if (this.heliY < currentBaseY) this.heliY = currentBaseY;
+                if (this.heliY < this.minHeliY) this.heliY = this.minHeliY;
 
                 let hingeAngleRad = Math.asin((this.heliY - 1.1) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
@@ -705,16 +713,17 @@
                 <a-entity id="silo-stack" position="0 0.4 0"></a-entity>
             </a-entity>
 
-            <!-- PIATTAFORMA DI ATTERRAGGIO A SUD (ORE 6 - UNDO BUTTON MECCANICO A MOLLA) -->
+            <!-- PIATTAFORMA DI ATTERRAGGIO A SUD (ORE 6 - DISCO UNDO ULTRA-SOTTILE) -->
             <a-entity id="south-station" position="0 0 4.5">
-                <a-cylinder position="0 0.04 0" radius="0.56" height="0.08" material="color: #212121; roughness: 0.8"></a-cylinder>
+                <!-- Bordo nero piattissimo -->
+                <a-cylinder position="0 0.005 0" radius="0.54" height="0.01" material="color: #212121; roughness: 0.8"></a-cylinder>
 
-                <a-entity id="undo-btn-group" position="0 0 0">
-                    <a-cylinder position="0 0.2 0" radius="0.5" height="0.4" material="color: #FFEB3B; roughness: 0.4"></a-cylinder>
-                    <a-text value="UNDO LANDING" position="0 0.41 0" rotation="-90 0 0" align="center" width="2.5" color="#000"></a-text>
-                    
-                    <a-entity id="target-display" position="0 0.4 0"></a-entity>
-                </a-entity>
+                <!-- Disco Undo quasi piatto -->
+                <a-cylinder id="undo-cylinder" position="0 0.02 0" radius="0.5" height="0.02" material="color: #FFEB3B; roughness: 0.4"></a-cylinder>
+                <a-text value="UNDO LANDING" position="0 0.035 0" rotation="-90 0 0" align="center" width="2.2" color="#000"></a-text>
+                
+                <!-- Ologramma Indicatore Sequenza Target -->
+                <a-entity id="target-display" position="0 0.05 0"></a-entity>
             </a-entity>
 
             <!-- 5 SFERE COLORATE RIMPICCIOLITE LUNGO IL PERCORSO (R=0.24) -->
@@ -813,7 +822,7 @@
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ -->
-                <a-text id="menu-version-val" value="v2.7.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v2.8.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

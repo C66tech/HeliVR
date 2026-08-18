@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Y-Axis Rotation Only</title>
+    <title>VR Vertibird Simulator - Fixed Menu & Lowest Initial Scale</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -21,9 +21,9 @@
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
 
-                // Gestione World Root, Scaling e Grab
+                // Gestione World Root, Scaling (Inizio AL MINIMO: 0.02 / 2%) e Grab
                 this.worldRoot = document.querySelector('#world-root');
-                this.currentScale = 0.3; 
+                this.currentScale = 0.02; // Scala minima di partenza
                 this.isDragging = false;
                 
                 this.initialControllerMatrixInv = new THREE.Matrix4();
@@ -35,16 +35,15 @@
                 this.tailRotorEl = document.querySelector('#tail-rotor');
                 this.rightHandEl = document.querySelector('#right-hand');
                 this.leftHandEl = document.querySelector('#left-hand');
-                this.cameraEl = document.querySelector('a-camera');
 
                 // Elementi Menu
                 this.menuPanel = document.querySelector('#menu-panel');
                 this.speedText = document.querySelector('#menu-speed-val');
                 this.windText = document.querySelector('#menu-wind-val');
                 this.menuVisible = false;
-                this.menuButtonPressedLastFrame = false;
+                this.yPressedLastFrame = false;
 
-                // Imposta scala iniziale bassa
+                // Imposta scala iniziale minima sul 3D
                 if (this.worldRoot && this.worldRoot.object3D) {
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
@@ -96,28 +95,17 @@
                 this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.04));
                 this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.04));
 
-                // --- TOGGLE MENU SOLO SUL TASTO Y SINISTRO ---
+                // --- TOGGLE MENU ---
                 this.toggleMenu = () => {
                     this.menuVisible = !this.menuVisible;
                     if (this.menuPanel) {
-                        if (this.menuVisible) {
-                            let camObj = this.cameraEl.object3D;
-                            let pos = new THREE.Vector3();
-                            let dir = new THREE.Vector3(0, 0, -1);
-                            camObj.getWorldPosition(pos);
-                            dir.applyQuaternion(camObj.getWorldQuaternion(new THREE.Quaternion()));
-
-                            let menuPos = pos.clone().add(dir.multiplyScalar(0.9));
-                            this.menuPanel.object3D.position.copy(menuPos);
-                            this.menuPanel.object3D.lookAt(pos);
-                            this.menuPanel.setAttribute('visible', true);
-                        } else {
-                            this.menuPanel.setAttribute('visible', false);
-                        }
+                        this.menuPanel.setAttribute('visible', this.menuVisible);
                     }
                 };
 
+                // Ascolto eventi A-Frame per il tasto Y e X
                 this.leftHandEl.addEventListener('ybuttondown', () => this.toggleMenu());
+                this.leftHandEl.addEventListener('xbuttondown', () => this.toggleMenu());
 
                 // --- LOGICA PULSANTI MENU ---
                 this.updateMenuUI = () => {
@@ -158,14 +146,18 @@
                 let rightStickY = 0;
                 let yPressed = false;
 
-                // --- 1. LETTURA INPUT ---
+                // --- 1. LETTURA INPUT WEBXRA/GAMEPAD ---
                 let xrSession = this.el.sceneEl.renderer ? this.el.sceneEl.renderer.xr.getSession() : null;
                 if (xrSession && xrSession.inputSources) {
                     for (let source of xrSession.inputSources) {
                         if (source.handedness === 'left' && source.gamepad) {
                             let gp = source.gamepad;
                             leftTrigger = gp.buttons[0] ? gp.buttons[0].value : 0;
-                            yPressed = gp.buttons[5] ? gp.buttons[5].pressed : false;
+                            // Controllo pulsanti Y (indice 5) e X (indice 4) o Tasto Menu (indice 3)
+                            let b4 = gp.buttons[4] ? gp.buttons[4].pressed : false;
+                            let b5 = gp.buttons[5] ? gp.buttons[5].pressed : false;
+                            let b3 = gp.buttons[3] ? gp.buttons[3].pressed : false;
+                            yPressed = b5 || b4 || b3;
                         }
                         if (source.handedness === 'right' && source.gamepad) {
                             let gp = source.gamepad;
@@ -179,7 +171,9 @@
                         if (g && g.connected) {
                             if (g.hand === 'left' || (g.id && g.id.toLowerCase().includes('left'))) {
                                 leftTrigger = g.buttons[0] ? g.buttons[0].value : 0;
-                                yPressed = g.buttons[5] ? g.buttons[5].pressed : false;
+                                let b4 = g.buttons[4] ? g.buttons[4].pressed : false;
+                                let b5 = g.buttons[5] ? g.buttons[5].pressed : false;
+                                yPressed = b5 || b4;
                             }
                             if (g.hand === 'right' || (g.id && g.id.toLowerCase().includes('right'))) {
                                 rightGrip = g.buttons[1] ? (g.buttons[1].value || (g.buttons[1].pressed ? 1 : 0)) : 0;
@@ -189,11 +183,11 @@
                     }
                 }
 
-                // --- DEBOUNCE TASTO Y ---
-                if (yPressed && !this.menuButtonPressedLastFrame) {
+                // --- DEBOUNCE TASTO MENU ---
+                if (yPressed && !this.yPressedLastFrame) {
                     this.toggleMenu();
                 }
-                this.menuButtonPressedLastFrame = yPressed;
+                this.yPressedLastFrame = yPressed;
 
                 if (leftTrigger > 0.02) {
                     this.initAudio();
@@ -224,7 +218,7 @@
                             let s = new THREE.Vector3();
                             targetMatrix.decompose(p, q, s);
 
-                            // Mantiene la rotazione SOLO sull'asse Y (azzera inclinazioni X e Z)
+                            // Mantieni la rotazione SOLO sull'asse Y (azzera tilt X e Z)
                             let euler = new THREE.Euler().setFromQuaternion(q, 'YXZ');
                             q.setFromEuler(new THREE.Euler(0, euler.y, 0, 'YXZ'));
 
@@ -241,7 +235,7 @@
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // --- 4. TURBOLENZE ---
+                // --- 4. TURBOLENZE (Fino a 500%) ---
                 let heightNoise = 0;
                 let pitchNoise = 0;
                 
@@ -342,8 +336,8 @@
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.8" position="-1 3 1"></a-light>
 
-        <!-- CONTENITORE GLOBALE DEL DIORAMA -->
-        <a-entity id="world-root" position="0 -0.3 -1.2" rotation="0 0 0" scale="0.3 0.3 0.3">
+        <!-- CONTENITORE GLOBALE DEL DIORAMA (Partenza con scala minima 0.02x) -->
+        <a-entity id="world-root" position="0 -0.2 -0.8" rotation="0 0 0" scale="0.02 0.02 0.02">
             
             <!-- Base con texture JPG -->
             <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="src: url(terreno.jpg); roughness: 0.8"></a-box>
@@ -402,43 +396,43 @@
 
         </a-entity> <!-- /world-root -->
 
-        <!-- PANNELLO MENU 3D COMPATTO -->
-        <a-entity id="menu-panel" position="0 1.5 -0.9" scale="0.5 0.5 0.5" visible="false">
-            <a-plane width="1.1" height="0.8" color="#1E1E1E" material="opacity: 0.92; transparent: true"></a-plane>
-            
-            <a-text value="IMPOSTAZIONI VOLO" position="0 0.3 0.01" align="center" width="1.8" color="#FFCC00"></a-text>
-
-            <!-- Controllo Velocità -->
-            <a-text value="Velocita Moto:" position="-0.45 0.12 0.01" width="1.3" color="#FFF"></a-text>
-            <a-plane id="btn-speed-dec" class="clickable" position="0.05 0.12 0.01" width="0.1" height="0.1" color="#D32F2F">
-                <a-text value="-" align="center" width="2" color="#FFF"></a-text>
-            </a-plane>
-            <a-text id="menu-speed-val" value="90 deg/s" position="0.25 0.12 0.01" align="center" width="1.2" color="#00FF66"></a-text>
-            <a-plane id="btn-speed-inc" class="clickable" position="0.43 0.12 0.01" width="0.1" height="0.1" color="#388E3C">
-                <a-text value="+" align="center" width="2" color="#FFF"></a-text>
-            </a-plane>
-
-            <!-- Controllo Vento -->
-            <a-text value="Ampiezza Vento:" position="-0.45 -0.08 0.01" width="1.3" color="#FFF"></a-text>
-            <a-plane id="btn-wind-dec" class="clickable" position="0.05 -0.08 0.01" width="0.1" height="0.1" color="#D32F2F">
-                <a-text value="-" align="center" width="2" color="#FFF"></a-text>
-            </a-plane>
-            <a-text id="menu-wind-val" value="100%" position="0.25 -0.08 0.01" align="center" width="1.2" color="#00FF66"></a-text>
-            <a-plane id="btn-wind-inc" class="clickable" position="0.43 -0.08 0.01" width="0.1" height="0.1" color="#388E3C">
-                <a-text value="+" align="center" width="2" color="#FFF"></a-text>
-            </a-plane>
-
-            <a-text value="Premi il Tasto Y per Chiudere" position="0 -0.3 0.01" align="center" width="1.0" color="#AAA"></a-text>
-        </a-entity>
-
         <!-- Camera e Giocatore -->
         <a-entity id="rig" position="0 0 0">
-            <a-camera position="0 1.5 0"></a-camera>
+            <a-camera position="0 1.5 0">
+                <!-- MENU AGGANCIATO ALLA CAMERA (Appare sempre esattamente davanti allo sguardo) -->
+                <a-entity id="menu-panel" position="0 0 -0.7" scale="0.4 0.4 0.4" visible="false">
+                    <a-plane width="1.1" height="0.8" color="#1E1E1E" material="opacity: 0.95; transparent: true"></a-plane>
+                    
+                    <a-text value="IMPOSTAZIONI VOLO" position="0 0.3 0.01" align="center" width="1.8" color="#FFCC00"></a-text>
+
+                    <!-- Controllo Velocità -->
+                    <a-text value="Velocita Moto:" position="-0.45 0.12 0.01" width="1.3" color="#FFF"></a-text>
+                    <a-plane id="btn-speed-dec" class="clickable" position="0.05 0.12 0.01" width="0.1" height="0.1" color="#D32F2F">
+                        <a-text value="-" align="center" width="2" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-speed-val" value="90 deg/s" position="0.25 0.12 0.01" align="center" width="1.2" color="#00FF66"></a-text>
+                    <a-plane id="btn-speed-inc" class="clickable" position="0.43 0.12 0.01" width="0.1" height="0.1" color="#388E3C">
+                        <a-text value="+" align="center" width="2" color="#FFF"></a-text>
+                    </a-plane>
+
+                    <!-- Controllo Vento -->
+                    <a-text value="Ampiezza Vento:" position="-0.45 -0.08 0.01" width="1.3" color="#FFF"></a-text>
+                    <a-plane id="btn-wind-dec" class="clickable" position="0.05 -0.08 0.01" width="0.1" height="0.1" color="#D32F2F">
+                        <a-text value="-" align="center" width="2" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-wind-val" value="100%" position="0.25 -0.08 0.01" align="center" width="1.2" color="#00FF66"></a-text>
+                    <a-plane id="btn-wind-inc" class="clickable" position="0.43 -0.08 0.01" width="0.1" height="0.1" color="#388E3C">
+                        <a-text value="+" align="center" width="2" color="#FFF"></a-text>
+                    </a-plane>
+
+                    <a-text value="Premi il Tasto Y per Chiudere" position="0 -0.3 0.01" align="center" width="1.0" color="#AAA"></a-text>
+                </a-entity>
+            </a-camera>
             
-            <!-- Controller Destro per Menu Raycaster e Grip -->
+            <!-- Controller Destro per Menu Raycaster e Grab -->
             <a-entity id="right-hand" oculus-touch-controls="hand: right" raycaster="objects: .clickable" laser-controls="hand: right"></a-entity>
             
-            <!-- Controller Sinistro per Gas (Grilletto) e Menu (Tasto Y) -->
+            <!-- Controller Sinistro per Gas (Grilletto) e Menu (Tasto Y/X) -->
             <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
         </a-entity>
     </a-scene>

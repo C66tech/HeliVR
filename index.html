@@ -2,22 +2,26 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Refined Model from Sketch</title>
+    <title>VR Vertibird Simulator - Left Controller Throttle & Menu</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
                 this.angle = 0;        
-                this.heliY = 0.31;     // Pattini perfettamente a filo con la base
+                this.heliY = 0.31;     
                 this.radius = 4.5;     
                 
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
 
+                // Parametri regolabili da Menu
+                this.speedMultiplier = 90.0; // Velocità moto circolare
+                this.windAmplitude = 1.0;    // Moltiplicatore vento / oscillazioni
+
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
 
-                // Gestione dello Scale e del Grab/Rotate 6DOF del Diorama
+                // Gestione World Root, Scaling e Grab
                 this.worldRoot = document.querySelector('#world-root');
                 this.currentScale = 1.0; 
                 this.isDragging = false;
@@ -30,6 +34,13 @@
                 this.rotorEl = document.querySelector('#main-rotor');
                 this.tailRotorEl = document.querySelector('#tail-rotor');
                 this.rightHandEl = document.querySelector('#right-hand');
+                this.leftHandEl = document.querySelector('#left-hand');
+
+                // Elementi Menu
+                this.menuPanel = document.querySelector('#menu-panel');
+                this.speedText = document.querySelector('#menu-speed-val');
+                this.windText = document.querySelector('#menu-wind-val');
+                this.menuVisible = false;
 
                 // --- SISTEMA AUDIO ---
                 this.audioCtx = null;
@@ -66,7 +77,7 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // --- SCALING FINE (Limite min 0.02) ---
+                // --- SCALING FINE ---
                 const applyScale = (delta) => {
                     this.currentScale = Math.min(3.0, Math.max(0.02, this.currentScale + delta));
                     if (this.worldRoot && this.worldRoot.object3D) {
@@ -75,62 +86,98 @@
                     }
                 };
 
-                // --- ASCOLTO TASTI A e B (Scaling Fine) ---
-                this.rightHandEl.addEventListener('abuttondown', () => {
-                    applyScale(-0.04); 
+                this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.04));
+                this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.04));
+
+                // --- APERTURA / CHIUSURA MENU TASTO SINISTRO (Menu / X / Y) ---
+                const toggleMenu = () => {
+                    this.menuVisible = !this.menuVisible;
+                    if (this.menuPanel) {
+                        this.menuPanel.setAttribute('visible', this.menuVisible);
+                    }
+                };
+
+                this.leftHandEl.addEventListener('menubuttondown', toggleMenu);
+                this.leftHandEl.addEventListener('xbuttondown', toggleMenu);
+                this.leftHandEl.addEventListener('ybuttondown', toggleMenu);
+
+                // --- LOGICA PULSANTI MENU ---
+                this.updateMenuUI = () => {
+                    if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
+                    if (this.windText) this.windText.setAttribute('value', `${(this.windAmplitude * 100).toFixed(0)}%`);
+                };
+
+                let btnSpeedDec = document.querySelector('#btn-speed-dec');
+                let btnSpeedInc = document.querySelector('#btn-speed-inc');
+                let btnWindDec = document.querySelector('#btn-wind-dec');
+                let btnWindInc = document.querySelector('#btn-wind-inc');
+
+                if (btnSpeedDec) btnSpeedDec.addEventListener('click', () => {
+                    this.speedMultiplier = Math.max(10.0, this.speedMultiplier - 15.0);
+                    this.updateMenuUI();
+                });
+                if (btnSpeedInc) btnSpeedInc.addEventListener('click', () => {
+                    this.speedMultiplier = Math.min(300.0, this.speedMultiplier + 15.0);
+                    this.updateMenuUI();
+                });
+                if (btnWindDec) btnWindDec.addEventListener('click', () => {
+                    this.windAmplitude = Math.max(0.0, this.windAmplitude - 0.25);
+                    this.updateMenuUI();
+                });
+                if (btnWindInc) btnWindInc.addEventListener('click', () => {
+                    this.windAmplitude = Math.min(3.0, this.windAmplitude + 0.25);
+                    this.updateMenuUI();
                 });
 
-                this.rightHandEl.addEventListener('bbuttondown', () => {
-                    applyScale(0.04);  
-                });
+                this.updateMenuUI();
             },
             tick: function (time, delta) {
                 let dt = delta / 1000;
                 let t = time / 1000; 
                 
-                let trigger = 0;
-                let grip = 0;
-                let stickY = 0;
-                let gp = null;
+                let leftTrigger = 0;
+                let rightGrip = 0;
+                let rightStickY = 0;
 
-                // --- 1. LETTURA INPUT ---
+                // --- 1. LETTURA INPUT SEPARATI (Sinistra = Gas, Destra = Stick & Grip) ---
                 let xrSession = this.el.sceneEl.renderer ? this.el.sceneEl.renderer.xr.getSession() : null;
                 if (xrSession && xrSession.inputSources) {
                     for (let source of xrSession.inputSources) {
+                        if (source.handedness === 'left' && source.gamepad) {
+                            leftTrigger = source.gamepad.buttons[0] ? source.gamepad.buttons[0].value : 0;
+                        }
                         if (source.handedness === 'right' && source.gamepad) {
-                            gp = source.gamepad;
-                            break;
+                            rightGrip = source.gamepad.buttons[1] ? (source.gamepad.buttons[1].value || (source.gamepad.buttons[1].pressed ? 1 : 0)) : 0;
+                            rightStickY = source.gamepad.axes.length >= 4 ? source.gamepad.axes[3] : (source.gamepad.axes.length >= 2 ? source.gamepad.axes[1] : 0);
                         }
                     }
-                }
-                if (!gp) {
+                } else {
                     let gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
                     for (let g of gamepads) {
-                        if (g && g.connected && (g.hand === 'right' || (g.id && g.id.toLowerCase().includes('right')))) {
-                            gp = g;
-                            break;
+                        if (g && g.connected) {
+                            if (g.hand === 'left' || (g.id && g.id.toLowerCase().includes('left'))) {
+                                leftTrigger = g.buttons[0] ? g.buttons[0].value : 0;
+                            }
+                            if (g.hand === 'right' || (g.id && g.id.toLowerCase().includes('right'))) {
+                                rightGrip = g.buttons[1] ? (g.buttons[1].value || (g.buttons[1].pressed ? 1 : 0)) : 0;
+                                rightStickY = g.axes.length >= 4 ? g.axes[3] : (g.axes.length >= 2 ? g.axes[1] : 0);
+                            }
                         }
                     }
                 }
 
-                if (gp) {
-                    trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
-                    grip = gp.buttons[1] ? (gp.buttons[1].value || (gp.buttons[1].pressed ? 1 : 0)) : 0;
-                    stickY = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
-                }
-
-                if (trigger > 0.02) {
+                if (leftTrigger > 0.02) {
                     this.initAudio();
                 }
 
-                if (Math.abs(stickY) < 0.15) stickY = 0;
-                if (trigger < 0.02) trigger = 0;
+                if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
+                if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // --- 2. LOGICA GRAB, MOVE & ROTATE DEL DIORAMA (GRIP) ---
+                // --- 2. LOGICA GRAB DEL DIORAMA (GRIP DESTRO) ---
                 if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
                     let handObj = this.rightHandEl.object3D;
                     
-                    if (grip > 0.5) {
+                    if (rightGrip > 0.5) {
                         handObj.updateMatrixWorld(true);
                         this.worldRoot.object3D.updateMatrixWorld(true);
 
@@ -158,16 +205,16 @@
                 }
 
                 // --- 3. INERZIA ---
-                this.currentThrottle += (trigger - this.currentThrottle) * dt * 5.0;
-                this.currentStickY += (stickY - this.currentStickY) * dt * 6.0;
+                this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
+                this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // --- 4. TURBOLENZE ---
+                // --- 4. TURBOLENZE (Regolate da windAmplitude) ---
                 let heightNoise = 0;
                 let pitchNoise = 0;
                 
                 if (this.currentThrottle > 0.05) {
-                    heightNoise = ((Math.sin(t * 2.3) * 0.03) + (Math.sin(t * 5.1) * 0.015)) * this.currentThrottle;
-                    pitchNoise = ((Math.sin(t * 1.8) * 1.2) + (Math.cos(t * 4.4) * 0.8)) * this.currentThrottle;
+                    heightNoise = (((Math.sin(t * 2.3) * 0.03) + (Math.sin(t * 5.1) * 0.015)) * this.currentThrottle) * this.windAmplitude;
+                    pitchNoise = (((Math.sin(t * 1.8) * 1.2) + (Math.cos(t * 4.4) * 0.8)) * this.currentThrottle) * this.windAmplitude;
                 }
 
                 // --- 5. FISICA DELL'ALTEZZA ---
@@ -197,9 +244,9 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 7. MOTO CIRCOLARE ---
+                // --- 7. MOTO CIRCOLARE (Regolato da speedMultiplier) ---
                 if (this.heliY > 0.315) {
-                    let angularSpeed = -speedFactor * this.currentThrottle * 90.0; 
+                    let angularSpeed = -speedFactor * this.currentThrottle * this.speedMultiplier; 
                     this.angle += angularSpeed * dt;
                 }
 
@@ -278,26 +325,30 @@
                 <!-- Asta Meccanica -->
                 <a-box id="rod" position="2.25 0 0" width="4.5" height="0.02" depth="0.02" color="#FFCC00"></a-box>
                 
-                <!-- Wrapper Elicottero (MODELLO AGGIORNATO DAL DISEGNO) -->
+                <!-- Wrapper Elicottero -->
                 <a-entity id="heli-wrapper" position="4.5 0 0">
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
                             
-                            <!-- 1. Cabina Principale (Box Rosso) -->
-                            <a-box position="0 0 0" width="0.65" height="0.45" depth="0.45" material="color: #D32F2F; roughness: 0.3"></a-box>
+                            <!-- Cabina Principale -->
+                            <a-box position="0 0 0" width="0.85" height="0.42" depth="0.45" material="color: #D32F2F; roughness: 0.3"></a-box>
 
-                            <!-- 2. Parabrezza anteriore (Sfera azzurra trasparente) -->
+                            <!-- Parabrezza -->
                             <a-sphere position="0.3 0 0" radius="0.22" material="color: #4FC3F7; opacity: 0.6; roughness: 0.1"></a-sphere>
 
-                            <!-- 3. Trave di Coda (Cilindro/Box allungato rosso) -->
+                            <!-- Trave di Coda -->
                             <a-box position="-0.9 0.05 0" width="1.4" height="0.14" depth="0.2" material="color: #D32F2F"></a-box>
 
-                            <!-- 4. Deriva verticale di coda (Triangolo rosso) -->
+                            <!-- Deriva verticale -->
                             <a-triangle vertex-a="0 0.3 0" vertex-b="-0.15 0 0" vertex-c="0.15 0 0" position="-1.55 0.25 0" rotation="0 0 -90" material="color: #D32F2F; side: double"></a-triangle>
 
-  
+                            <!-- Rotore di Coda -->
+                            <a-entity position="-1.65 0.15 0" rotation="90 0 0">
+                                <a-cylinder radius="0.06" height="0.02" material="color: #FFCC00"></a-cylinder>
+                                <a-box id="tail-rotor" width="0.45" height="0.01" depth="0.07" color="#FFEB3B"></a-box>
+                            </a-entity>
 
-                            <!-- 6. Pattini e Montanti d'atterraggio (Verde Prato) -->
+                            <!-- Pattini e Montanti -->
                             <a-box position="0.05 -0.31 -0.22" width="0.75" height="0.025" depth="0.035" material="color: #388E3C"></a-box>
                             <a-box position="0.05 -0.31 0.22" width="0.75" height="0.025" depth="0.035" material="color: #388E3C"></a-box>
                             <a-box position="0.18 -0.16 -0.22" width="0.025" height="0.28" depth="0.02" rotation="0 0 15" material="color: #388E3C"></a-box>
@@ -305,7 +356,7 @@
                             <a-box position="0.18 -0.16 0.22" width="0.025" height="0.28" depth="0.02" rotation="0 0 15" material="color: #388E3C"></a-box>
                             <a-box position="-0.12 -0.16 0.22" width="0.025" height="0.28" depth="0.02" rotation="0 0 -15" material="color: #388E3C"></a-box>
 
-                            <!-- 7. Rotore Principale (Albero, Mozzo e Pale Gialle) -->
+                            <!-- Rotore Principale -->
                             <a-entity position="0 0.24 0">
                                 <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #D32F2F"></a-cylinder>
                                 <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
@@ -321,9 +372,41 @@
 
         <!-- Camera e Giocatore -->
         <a-entity id="rig" position="0 0 0">
-            <a-camera position="0 1.5 0"></a-camera>
+            <a-camera position="0 1.5 0">
+                <!-- PANNELLO MENU 3D FLUTTUANTE DAVANTI ALLA CAMERA -->
+                <a-entity id="menu-panel" position="0 0 -1.2" visible="false">
+                    <a-plane width="1.1" height="0.8" color="#1E1E1E" material="opacity: 0.9; transparent: true"></a-plane>
+                    
+                    <a-text value="IMPOSTAZIONI VOLO" position="0 0.3 0.01" align="center" width="1.8" color="#FFCC00"></a-text>
+
+                    <!-- Controllo Velocità -->
+                    <a-text value="Velocita Moto:" position="-0.45 0.12 0.01" width="1.3" color="#FFF"></a-text>
+                    <a-plane id="btn-speed-dec" class="clickable" position="0.05 0.12 0.01" width="0.1" height="0.1" color="#D32F2F">
+                        <a-text value="-" align="center" width="2" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-speed-val" value="90 deg/s" position="0.25 0.12 0.01" align="center" width="1.2" color="#00FF66"></a-text>
+                    <a-plane id="btn-speed-inc" class="clickable" position="0.43 0.12 0.01" width="0.1" height="0.1" color="#388E3C">
+                        <a-text value="+" align="center" width="2" color="#FFF"></a-text>
+                    </a-plane>
+
+                    <!-- Controllo Vento -->
+                    <a-text value="Ampiezza Vento:" position="-0.45 -0.08 0.01" width="1.3" color="#FFF"></a-text>
+                    <a-plane id="btn-wind-dec" class="clickable" position="0.05 -0.08 0.01" width="0.1" height="0.1" color="#D32F2F">
+                        <a-text value="-" align="center" width="2" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-wind-val" value="100%" position="0.25 -0.08 0.01" align="center" width="1.2" color="#00FF66"></a-text>
+                    <a-plane id="btn-wind-inc" class="clickable" position="0.43 -0.08 0.01" width="0.1" height="0.1" color="#388E3C">
+                        <a-text value="+" align="center" width="2" color="#FFF"></a-text>
+                    </a-plane>
+
+                    <a-text value="Premi il tasto Menu Sinistro per Chiudere" position="0 -0.3 0.01" align="center" width="1.0" color="#AAA"></a-text>
+                </a-entity>
+            </a-camera>
             
-            <a-entity id="right-hand" oculus-touch-controls="hand: right"></a-entity>
+            <!-- Controller Destro con Puntatore Laser abilitato per il Menu -->
+            <a-entity id="right-hand" oculus-touch-controls="hand: right" raycaster="objects: .clickable" laser-controls="hand: right"></a-entity>
+            
+            <!-- Controller Sinistro per Gas e Menu -->
             <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
         </a-entity>
     </a-scene>

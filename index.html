@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Softer Wind & Repositioned Menu</title>
+    <title>VR Vertibird Simulator - Clean Menu Layout</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -16,7 +16,7 @@
 
                 // Parametri regolabili da Menu
                 this.speedMultiplier = 90.0; 
-                this.windAmplitude = 0.0;    // Vento impostato a 0 di default
+                this.windAmplitude = 0;    // Vento da 0 a 100 (default 0)
 
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
@@ -95,7 +95,7 @@
                 // --- LOGICA PULSANTI MENU ---
                 this.updateMenuUI = () => {
                     if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
-                    if (this.windText) this.windText.setAttribute('value', `${(this.windAmplitude * 100).toFixed(0)}%`);
+                    if (this.windText) this.windText.setAttribute('value', `${this.windAmplitude.toFixed(0)}`);
                 };
 
                 let btnSpeedDec = document.querySelector('#btn-speed-dec');
@@ -112,11 +112,11 @@
                     this.updateMenuUI();
                 });
                 if (btnWindDec) btnWindDec.addEventListener('click', () => {
-                    this.windAmplitude = Math.max(0.0, this.windAmplitude - 0.25);
+                    this.windAmplitude = Math.max(0, this.windAmplitude - 10);
                     this.updateMenuUI();
                 });
                 if (btnWindInc) btnWindInc.addEventListener('click', () => {
-                    this.windAmplitude = Math.min(5.0, this.windAmplitude + 0.25);
+                    this.windAmplitude = Math.min(100, this.windAmplitude + 10);
                     this.updateMenuUI();
                 });
 
@@ -204,14 +204,14 @@
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // --- 4. CALCOLO TURBOLENZE RIDOTTE DEL VENTO ---
+                // --- 4. CALCOLO TURBOLENZE DEL VENTO (RANGE 0 - 100) ---
                 let windThrottleOffset = 0;
                 let windStickOffset = 0;
 
                 if (this.windAmplitude > 0) {
-                    // Ampiezze attenuatissime per un'esperienza più controllabile
-                    windThrottleOffset = ((Math.sin(t * 2.3) * 0.06) + (Math.cos(t * 4.7) * 0.03) + (Math.sin(t * 7.1) * 0.015)) * this.windAmplitude;
-                    windStickOffset = ((Math.sin(t * 1.9) * 0.12) + (Math.cos(t * 3.8) * 0.06) + (Math.sin(t * 6.3) * 0.03)) * this.windAmplitude;
+                    let normWind = this.windAmplitude / 100.0;
+                    windThrottleOffset = ((Math.sin(t * 2.3) * 0.3) + (Math.cos(t * 4.7) * 0.15) + (Math.sin(t * 7.1) * 0.08)) * normWind;
+                    windStickOffset = ((Math.sin(t * 1.9) * 0.6) + (Math.cos(t * 3.8) * 0.3) + (Math.sin(t * 6.3) * 0.15)) * normWind;
                 }
 
                 let effectiveThrottleInput = Math.max(0, Math.min(1.0, this.currentThrottle + windThrottleOffset));
@@ -317,7 +317,6 @@
             
             <!-- STACCIONATA ARANCIONE SCURO INTORNO ALLA BASE -->
             <a-entity id="fence">
-                <!-- Pali d'Angolo e Intermedi -->
                 <a-box position="-6 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
                 <a-box position="6 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
                 <a-box position="-6 0.3 6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
@@ -328,19 +327,15 @@
                 <a-box position="-6 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
                 <a-box position="6 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
 
-                <!-- Traverse Orizzontali Nord (Z = -6) -->
                 <a-box position="0 0.18 -6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
                 <a-box position="0 0.45 -6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
 
-                <!-- Traverse Orizzontali Sud (Z = 6) -->
                 <a-box position="0 0.18 6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
                 <a-box position="0 0.45 6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
 
-                <!-- Traverse Orizzontali Ovest (X = -6) -->
                 <a-box position="-6 0.18 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
                 <a-box position="-6 0.45 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
 
-                <!-- Traverse Orizzontali Est (X = 6) -->
                 <a-box position="6 0.18 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
                 <a-box position="6 0.45 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
             </a-entity>
@@ -397,30 +392,38 @@
                 </a-entity>
             </a-entity>
 
-            <!-- PANNELLO MENÙ SPOSTATO PIÙ A SINISTRA (X = -11.5) -->
+            <!-- PANNELLO MENÙ ORDINATO E BEN SPAZIATO (X = -11.5) -->
             <a-entity id="menu-panel" position="-11.5 2.5 0" rotation="0 30 0" visible="true">
-                <a-plane width="6" height="4.5" color="#1E1E1E" material="opacity: 0.95; transparent: true"></a-plane>
+                <!-- Sfondo del Pannello -->
+                <a-plane width="6.5" height="4.5" color="#1E1E1E" material="opacity: 0.95; transparent: true"></a-plane>
                 
-                <a-text value="IMPOSTAZIONI VOLO" position="0 1.6 0.05" align="center" width="10" color="#FFCC00"></a-text>
+                <!-- Titolo -->
+                <a-text value="IMPOSTAZIONI VOLO" position="0 1.6 0.05" align="center" width="9" color="#FFCC00"></a-text>
 
-                <!-- Controllo Velocità -->
-                <a-text value="Velocita Moto:" position="-2.5 0.5 0.05" width="7" color="#FFF"></a-text>
-                <a-plane id="btn-speed-dec" class="clickable" position="0.2 0.5 0.05" width="0.7" height="0.7" color="#D32F2F">
-                    <a-text value="-" align="center" width="12" color="#FFF"></a-text>
+                <!-- RIGA 1: SPEED -->
+                <a-text value="Speed" position="-2.6 0.5 0.05" align="left" width="8" color="#FFF"></a-text>
+                
+                <a-plane id="btn-speed-dec" class="clickable" position="0.1 0.5 0.05" width="0.6" height="0.6" color="#D32F2F">
+                    <a-text value="-" align="center" width="10" color="#FFF"></a-text>
                 </a-plane>
-                <a-text id="menu-speed-val" value="90 deg/s" position="1.5 0.5 0.05" align="center" width="7" color="#00FF66"></a-text>
-                <a-plane id="btn-speed-inc" class="clickable" position="2.5 0.5 0.05" width="0.7" height="0.7" color="#388E3C">
-                    <a-text value="+" align="center" width="12" color="#FFF"></a-text>
+                
+                <a-text id="menu-speed-val" value="90 deg/s" position="1.4 0.5 0.05" align="center" width="7" color="#00FF66"></a-text>
+                
+                <a-plane id="btn-speed-inc" class="clickable" position="2.6 0.5 0.05" width="0.6" height="0.6" color="#388E3C">
+                    <a-text value="+" align="center" width="10" color="#FFF"></a-text>
                 </a-plane>
 
-                <!-- Controllo Vento -->
-                <a-text value="Ampiezza Vento:" position="-2.5 -0.8 0.05" width="7" color="#FFF"></a-text>
-                <a-plane id="btn-wind-dec" class="clickable" position="0.2 -0.8 0.05" width="0.7" height="0.7" color="#D32F2F">
-                    <a-text value="-" align="center" width="12" color="#FFF"></a-text>
+                <!-- RIGA 2: WIND -->
+                <a-text value="Wind" position="-2.6 -0.6 0.05" align="left" width="8" color="#FFF"></a-text>
+                
+                <a-plane id="btn-wind-dec" class="clickable" position="0.1 -0.6 0.05" width="0.6" height="0.6" color="#D32F2F">
+                    <a-text value="-" align="center" width="10" color="#FFF"></a-text>
                 </a-plane>
-                <a-text id="menu-wind-val" value="0%" position="1.5 -0.8 0.05" align="center" width="7" color="#00FF66"></a-text>
-                <a-plane id="btn-wind-inc" class="clickable" position="2.5 -0.8 0.05" width="0.7" height="0.7" color="#388E3C">
-                    <a-text value="+" align="center" width="12" color="#FFF"></a-text>
+                
+                <a-text id="menu-wind-val" value="0" position="1.4 -0.6 0.05" align="center" width="7" color="#00FF66"></a-text>
+                
+                <a-plane id="btn-wind-inc" class="clickable" position="2.6 -0.6 0.05" width="0.6" height="0.6" color="#388E3C">
+                    <a-text value="+" align="center" width="10" color="#FFF"></a-text>
                 </a-plane>
             </a-entity>
 

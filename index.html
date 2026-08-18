@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - 9:16 Menu v1.1.4</title>
+    <title>VertiVR Simulator - Black Text & Spaced Menu v1.1.5</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "1.1.4"; // Versione aggiornata
+                this.version = "1.1.5"; // Versione aggiornata
                 this.angle = 0;        
                 this.heliY = 0.31;     
                 this.radius = 4.5;     
@@ -350,7 +350,7 @@
     </div>
 
     <a-scene xr-mode-ui="enabled: true">
-        <!-- GESTIONE ASSET TEXTURE (Nome esatto: VertiVRMenu.jpg) -->
+        <!-- GESTIONE ASSET TEXTURE -->
         <a-assets>
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
@@ -447,37 +447,35 @@
                 <!-- Sfondo Mappato 9:16 -->
                 <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                <!-- IL 25% SUPERIORE È RISERVATO AL LOGO DELL'IMMAGINE -->
-
-                <!-- CONTROLLI NELLA PARTE INFERIORE -->
+                <!-- CONTROLLI NELLA PARTE INFERIORE CON TESTO NERO E COLONNE BEN DISTRIBUITE -->
                 <!-- RIGA 1: SPEED (Y = -0.5) -->
-                <a-text value="Speed" position="-1.3 -0.5 0.05" align="left" width="5.5" color="#FFF"></a-text>
+                <a-text value="Speed" position="-1.5 -0.5 0.05" align="left" width="5.5" color="#000000"></a-text>
                 
-                <a-plane id="btn-speed-dec" class="clickable" position="0.1 -0.5 0.05" width="0.45" height="0.45" color="#D32F2F">
+                <a-plane id="btn-speed-dec" class="clickable" position="-0.3 -0.5 0.05" width="0.45" height="0.45" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
                 
-                <a-text id="menu-speed-val" value="90 deg/s" position="0.9 -0.5 0.05" align="center" width="4.5" color="#00FF66"></a-text>
+                <a-text id="menu-speed-val" value="90 deg/s" position="0.6 -0.5 0.05" align="center" width="4.5" color="#000000"></a-text>
                 
-                <a-plane id="btn-speed-inc" class="clickable" position="1.3 -0.5 0.05" width="0.45" height="0.45" color="#388E3C">
+                <a-plane id="btn-speed-inc" class="clickable" position="1.35 -0.5 0.05" width="0.45" height="0.45" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
                 <!-- RIGA 2: WIND (Y = -1.4) -->
-                <a-text value="Wind" position="-1.3 -1.4 0.05" align="left" width="5.5" color="#FFF"></a-text>
+                <a-text value="Wind" position="-1.5 -1.4 0.05" align="left" width="5.5" color="#000000"></a-text>
                 
-                <a-plane id="btn-wind-dec" class="clickable" position="0.1 -1.4 0.05" width="0.45" height="0.45" color="#D32F2F">
+                <a-plane id="btn-wind-dec" class="clickable" position="-0.3 -1.4 0.05" width="0.45" height="0.45" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
                 
-                <a-text id="menu-wind-val" value="0" position="0.9 -1.4 0.05" align="center" width="4.5" color="#00FF66"></a-text>
+                <a-text id="menu-wind-val" value="0" position="0.6 -1.4 0.05" align="center" width="4.5" color="#000000"></a-text>
                 
-                <a-plane id="btn-wind-inc" class="clickable" position="1.3 -1.4 0.05" width="0.45" height="0.45" color="#388E3C">
+                <a-plane id="btn-wind-inc" class="clickable" position="1.35 -1.4 0.05" width="0.45" height="0.45" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ (Y = -2.8) -->
-                <a-text id="menu-version-val" value="v1.1.4" position="0 -2.8 0.05" align="center" width="3.2" color="#AAAAAA"></a-text>
+                <a-text id="menu-version-val" value="v1.1.5" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

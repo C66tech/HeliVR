@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Spring Undo Platform & Presets v2.5.0</title>
+    <title>VertiVR Simulator - Yellow Stinger & Smaller Spheres v2.6.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "2.5.0"; 
+                this.version = "2.6.0"; 
                 this.angle = 0;        
                 this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
@@ -19,7 +19,7 @@
                 // --- INERZIA MOTO CIRCOLARE ---
                 this.angularVelocity = 0; 
 
-                // Parametri Iniziali Richiesti
+                // Parametri Iniziali
                 this.speedMultiplier = 180.0; 
                 this.wobbleAmplitude = 80;   
                 this.inertiaValue = 80;     
@@ -41,6 +41,7 @@
                 this.heliWrapperEl = document.querySelector('#heli-wrapper');
                 this.heliPitchEl = document.querySelector('#heli-pitch');
                 this.rotorEl = document.querySelector('#main-rotor');
+                this.stingerEl = document.querySelector('#heli-stinger');
                 this.rightHandEl = document.querySelector('#right-hand');
                 this.leftHandEl = document.querySelector('#left-hand');
 
@@ -363,6 +364,7 @@
                 sphereObj.timer = setTimeout(() => {
                     sphereObj.active = true;
                     if (sphereEl) {
+                        sphereEl.setAttribute('radius', '0.24');
                         sphereEl.setAttribute('visible', 'true');
                         this.playPlopSound();
                     }
@@ -451,11 +453,20 @@
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // --- CALCOLO POSIZIONE 3D REALE E DISTANZA A PIATTAFORMA A SUD ---
+                // --- CALCOLO POSIZIONI 3D LOCALI DEL VERTIBIRD E DEL PUNGIGLIONE ---
                 let heliLocalPos = new THREE.Vector3();
+                let stingerLocalPos = new THREE.Vector3();
+
                 if (this.heliPitchEl && this.heliPitchEl.object3D && this.worldRoot && this.worldRoot.object3D) {
                     this.heliPitchEl.object3D.getWorldPosition(heliLocalPos);
                     this.worldRoot.object3D.worldToLocal(heliLocalPos);
+                }
+
+                if (this.stingerEl && this.stingerEl.object3D && this.worldRoot && this.worldRoot.object3D) {
+                    this.stingerEl.object3D.getWorldPosition(stingerLocalPos);
+                    this.worldRoot.object3D.worldToLocal(stingerLocalPos);
+                } else {
+                    stingerLocalPos.copy(heliLocalPos);
                 }
 
                 let southPos = new THREE.Vector3(0, 0.2, 4.5);
@@ -467,17 +478,16 @@
                 let isAirborne = this.heliY > (this.minHeliY + this.buttonYOffset + 0.008);
 
                 if (isOverSouth && !isAirborne) {
-                    targetButtonOffset = -0.08; // Affondamento della molla di 8 cm
+                    targetButtonOffset = -0.08; 
                     if (this.canUndo) {
                         this.canUndo = false;
                         this.popLastCubeFromSilo();
-                        this.playClickSound(); // Suono CLICK all'impatto col pulsante
+                        this.playClickSound(); 
                     }
                 } else if (distToSouth > 1.2 || isAirborne) {
                     this.canUndo = true; 
                 }
 
-                // Animazione fluida del pulsante a molla
                 this.buttonYOffset += (targetButtonOffset - this.buttonYOffset) * dt * 12.0;
                 let btnGroup = document.querySelector('#undo-btn-group');
                 if (btnGroup) {
@@ -506,7 +516,6 @@
                     effectiveThrottle = (effectiveThrottleInput - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                // La quota base si abbassa con il pulsante quando ci si trova sopra
                 let currentBaseY = isOverSouth ? (this.minHeliY + this.buttonYOffset) : this.minHeliY;
                 let targetHeliY = currentBaseY + (effectiveThrottle * maxFlightHeight);
                 this.heliY += (targetHeliY - this.heliY) * dt * 6.0;
@@ -564,15 +573,17 @@
 
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // --- CHECK COLLISIONE REALE 3D CON SFERE COLORATE ---
+                // --- CHECK COLLISIONE REALE: UNICAMENTE IL PUNGIGLIONE TOCCA LE SFERE ---
                 this.spheres.forEach(s => {
                     if (!s.active) return; 
 
                     let sphereEl = document.querySelector(`#${s.id}`);
                     if (sphereEl && sphereEl.object3D) {
-                        let distToSphere = heliLocalPos.distanceTo(sphereEl.object3D.position);
+                        // Distanza tra la punta del pungiglione e il centro della sfera
+                        let distStingerToSphere = stingerLocalPos.distanceTo(sphereEl.object3D.position);
 
-                        if (distToSphere < 0.55) {
+                        // Soglia di contatto precisa per sfere ridotte (r=0.24 + tolleranza pungiglione)
+                        if (distStingerToSphere < 0.30) {
                             this.spawnCubeInSilo(s.color);
                             this.triggerSphereExplosion(s);
                         }
@@ -699,12 +710,12 @@
                 </a-entity>
             </a-entity>
 
-            <!-- 5 SFERE COLORATE LUNGO IL PERCORSO -->
-            <a-sphere id="sphere-1" position="0 0.8 -4.5" radius="0.35" material="color: #E53935; opacity: 0.95; roughness: 0.2"></a-sphere>
-            <a-sphere id="sphere-2" position="3.89 1.4 -2.25" radius="0.35" material="color: #4CAF50; opacity: 0.95; roughness: 0.2"></a-sphere>
-            <a-sphere id="sphere-3" position="3.89 2.1 2.25" radius="0.35" material="color: #1E88E5; opacity: 0.95; roughness: 0.2"></a-sphere>
-            <a-sphere id="sphere-4" position="-3.89 1.1 2.25" radius="0.35" material="color: #8E24AA; opacity: 0.95; roughness: 0.2"></a-sphere>
-            <a-sphere id="sphere-5" position="-3.89 2.5 -2.25" radius="0.35" material="color: #FB8C00; opacity: 0.95; roughness: 0.2"></a-sphere>
+            <!-- 5 SFERE COLORATE RIMPICCIOLITE LUNGO IL PERCORSO (R=0.24) -->
+            <a-sphere id="sphere-1" position="0 0.8 -4.5" radius="0.24" material="color: #E53935; opacity: 0.95; roughness: 0.2"></a-sphere>
+            <a-sphere id="sphere-2" position="3.89 1.4 -2.25" radius="0.24" material="color: #4CAF50; opacity: 0.95; roughness: 0.2"></a-sphere>
+            <a-sphere id="sphere-3" position="3.89 2.1 2.25" radius="0.24" material="color: #1E88E5; opacity: 0.95; roughness: 0.2"></a-sphere>
+            <a-sphere id="sphere-4" position="-3.89 1.1 2.25" radius="0.24" material="color: #8E24AA; opacity: 0.95; roughness: 0.2"></a-sphere>
+            <a-sphere id="sphere-5" position="-3.89 2.5 -2.25" radius="0.24" material="color: #FB8C00; opacity: 0.95; roughness: 0.2"></a-sphere>
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
@@ -722,6 +733,10 @@
 
                             <!-- Parabrezza a Sfera Sporgente per Metà -->
                             <a-sphere position="0.275 0 0" radius="0.22" material="color: #4FC3F7; opacity: 0.6; roughness: 0.1"></a-sphere>
+
+                            <!-- PUNGIGLIONE GIALLO SUL MUSO PER LA COLLISIONE -->
+                            <a-cone position="0.58 0 0" rotation="0 0 -90" radius-bottom="0.05" radius-top="0.005" height="0.25" material="color: #FFEB3B; roughness: 0.2; metalness: 0.3"></a-cone>
+                            <a-entity id="heli-stinger" position="0.71 0 0"></a-entity>
 
                             <!-- Lampeggiante sulla Cabina -->
                             <a-entity id="beacon-light" position="0 0.23 0">
@@ -791,7 +806,7 @@
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ -->
-                <a-text id="menu-version-val" value="v2.5.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v2.6.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

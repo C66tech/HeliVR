@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Real 3D Vector Collision v2.4.0</title>
+    <title>VertiVR Simulator - Spring Undo Platform & Presets v2.5.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "2.4.0"; 
+                this.version = "2.5.0"; 
                 this.angle = 0;        
                 this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
@@ -19,13 +19,16 @@
                 // --- INERZIA MOTO CIRCOLARE ---
                 this.angularVelocity = 0; 
 
-                // Parametri Menu
-                this.speedMultiplier = 90.0; 
-                this.wobbleAmplitude = 0;   
-                this.inertiaValue = 20;     
+                // Parametri Iniziali Richiesti
+                this.speedMultiplier = 180.0; 
+                this.wobbleAmplitude = 80;   
+                this.inertiaValue = 80;     
 
                 this.rotorAngle = 0;
                 this.currentAngularSpeed = 0; 
+
+                // Escursione Pulsante a Molla
+                this.buttonYOffset = 0;
 
                 // Gestione World Root
                 this.worldRoot = document.querySelector('#world-root');
@@ -131,7 +134,7 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // --- EFFETTI SONORI SINTETIZZATI (BANG & PLOP) ---
+                // --- EFFETTI SONORI (BANG, PLOP E CLICK) ---
                 this.playBangSound = () => {
                     if (!this.audioCtx) return;
                     try {
@@ -179,6 +182,27 @@
                         gain.connect(this.audioCtx.destination);
                         osc.start(now);
                         osc.stop(now + 0.1);
+                    } catch(e) {}
+                };
+
+                this.playClickSound = () => {
+                    if (!this.audioCtx) return;
+                    try {
+                        let now = this.audioCtx.currentTime;
+                        let osc = this.audioCtx.createOscillator();
+                        let gain = this.audioCtx.createGain();
+
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(1200, now);
+                        osc.frequency.exponentialRampToValueAtTime(120, now + 0.025);
+
+                        gain.gain.setValueAtTime(0.7, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+
+                        osc.connect(gain);
+                        gain.connect(this.audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.025);
                     } catch(e) {}
                 };
 
@@ -327,7 +351,6 @@
                 }
             },
 
-            // --- ESPLOSIONE E RIGENERAZIONE SFERA ---
             triggerSphereExplosion: function(sphereObj) {
                 sphereObj.active = false;
                 let sphereEl = document.querySelector(`#${sphereObj.id}`);
@@ -337,7 +360,6 @@
                     sphereEl.setAttribute('visible', 'false');
                 }
 
-                // Rigenerazione dopo 5 secondi
                 sphereObj.timer = setTimeout(() => {
                     sphereObj.active = true;
                     if (sphereEl) {
@@ -429,11 +451,42 @@
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
+                // --- CALCOLO POSIZIONE 3D REALE E DISTANZA A PIATTAFORMA A SUD ---
+                let heliLocalPos = new THREE.Vector3();
+                if (this.heliPitchEl && this.heliPitchEl.object3D && this.worldRoot && this.worldRoot.object3D) {
+                    this.heliPitchEl.object3D.getWorldPosition(heliLocalPos);
+                    this.worldRoot.object3D.worldToLocal(heliLocalPos);
+                }
+
+                let southPos = new THREE.Vector3(0, 0.2, 4.5);
+                let distToSouth = heliLocalPos.distanceTo(southPos);
+                let isOverSouth = (distToSouth < 0.85);
+
+                // --- FISICA DELLA PIATTAFORMA UNDO A MOLLA ---
+                let targetButtonOffset = 0;
+                let isAirborne = this.heliY > (this.minHeliY + this.buttonYOffset + 0.008);
+
+                if (isOverSouth && !isAirborne) {
+                    targetButtonOffset = -0.08; // Affondamento della molla di 8 cm
+                    if (this.canUndo) {
+                        this.canUndo = false;
+                        this.popLastCubeFromSilo();
+                        this.playClickSound(); // Suono CLICK all'impatto col pulsante
+                    }
+                } else if (distToSouth > 1.2 || isAirborne) {
+                    this.canUndo = true; 
+                }
+
+                // Animazione fluida del pulsante a molla
+                this.buttonYOffset += (targetButtonOffset - this.buttonYOffset) * dt * 12.0;
+                let btnGroup = document.querySelector('#undo-btn-group');
+                if (btnGroup) {
+                    btnGroup.setAttribute('position', `0 ${this.buttonYOffset} 0`);
+                }
+
                 // --- 4. WOBBLING ---
                 let wobbleThrottleOffset = 0;
                 let wobbleStickOffset = 0;
-
-                let isAirborne = this.heliY > (this.minHeliY + 0.005);
 
                 if (this.wobbleAmplitude > 0 && isAirborne) {
                     let normWobble = this.wobbleAmplitude / 100.0;
@@ -453,9 +506,11 @@
                     effectiveThrottle = (effectiveThrottleInput - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                let targetHeliY = this.minHeliY + (effectiveThrottle * maxFlightHeight);
-                this.heliY += (targetHeliY - this.heliY) * dt * 4.0;
-                if (this.heliY < this.minHeliY) this.heliY = this.minHeliY;
+                // La quota base si abbassa con il pulsante quando ci si trova sopra
+                let currentBaseY = isOverSouth ? (this.minHeliY + this.buttonYOffset) : this.minHeliY;
+                let targetHeliY = currentBaseY + (effectiveThrottle * maxFlightHeight);
+                this.heliY += (targetHeliY - this.heliY) * dt * 6.0;
+                if (this.heliY < currentBaseY) this.heliY = currentBaseY;
 
                 let hingeAngleRad = Math.asin((this.heliY - 1.1) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
@@ -509,26 +564,6 @@
 
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // --- CALCOLO POSIZIONE 3D REALE DEL VERTIBIRD ---
-                let heliLocalPos = new THREE.Vector3();
-                if (this.heliPitchEl && this.heliPitchEl.object3D && this.worldRoot && this.worldRoot.object3D) {
-                    this.heliPitchEl.object3D.getWorldPosition(heliLocalPos);
-                    this.worldRoot.object3D.worldToLocal(heliLocalPos);
-                }
-
-                // --- CHECK ATTERRAGGIO SU PIATTAFORMA A SUD (UNDO PLATFORM) ---
-                let southPos = new THREE.Vector3(0, 0.2, 4.5);
-                let distToSouth = heliLocalPos.distanceTo(southPos);
-
-                if (!isAirborne && distToSouth < 0.8) {
-                    if (this.canUndo) {
-                        this.canUndo = false;
-                        this.popLastCubeFromSilo();
-                    }
-                } else if (distToSouth > 1.2 || isAirborne) {
-                    this.canUndo = true; 
-                }
-
                 // --- CHECK COLLISIONE REALE 3D CON SFERE COLORATE ---
                 this.spheres.forEach(s => {
                     if (!s.active) return; 
@@ -537,7 +572,6 @@
                     if (sphereEl && sphereEl.object3D) {
                         let distToSphere = heliLocalPos.distanceTo(sphereEl.object3D.position);
 
-                        // Impatto metrico reale (Soglia < 0.55m nello spazio locale)
                         if (distToSphere < 0.55) {
                             this.spawnCubeInSilo(s.color);
                             this.triggerSphereExplosion(s);
@@ -650,13 +684,19 @@
                 <a-entity id="silo-stack" position="0 0.4 0"></a-entity>
             </a-entity>
 
-            <!-- PIATTAFORMA DI ATTERRAGGIO A SUD (ORE 6 - UNDO PLATFORM) -->
+            <!-- PIATTAFORMA DI ATTERRAGGIO A SUD (ORE 6 - UNDO BUTTON MECCANICO A MOLLA) -->
             <a-entity id="south-station" position="0 0 4.5">
-                <a-cylinder position="0 0.2 0" radius="0.5" height="0.4" material="color: #FFEB3B; roughness: 0.4"></a-cylinder>
-                <a-text value="UNDO LANDING" position="0 0.45 0" rotation="-90 0 0" align="center" width="2.5" color="#000"></a-text>
-                
-                <!-- Ologramma Indicatore Sequenza Target -->
-                <a-entity id="target-display" position="0 0.4 0"></a-entity>
+                <!-- Base fissa di alloggiamento del pulsante -->
+                <a-cylinder position="0 0.04 0" radius="0.56" height="0.08" material="color: #212121; roughness: 0.8"></a-cylinder>
+
+                <!-- Gruppo Pulsante a Molla (Animato in Y al contatto) -->
+                <a-entity id="undo-btn-group" position="0 0 0">
+                    <a-cylinder position="0 0.2 0" radius="0.5" height="0.4" material="color: #FFEB3B; roughness: 0.4"></a-cylinder>
+                    <a-text value="UNDO LANDING" position="0 0.41 0" rotation="-90 0 0" align="center" width="2.5" color="#000"></a-text>
+                    
+                    <!-- Ologramma Indicatore Sequenza Target -->
+                    <a-entity id="target-display" position="0 0.4 0"></a-entity>
+                </a-entity>
             </a-entity>
 
             <!-- 5 SFERE COLORATE LUNGO IL PERCORSO -->
@@ -725,7 +765,7 @@
                 <a-plane id="btn-speed-dec" class="clickable" position="-0.3 -0.3 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
-                <a-text id="menu-speed-val" value="90 deg/s" position="0.6 -0.3 0.05" align="center" width="4.5" color="#000000"></a-text>
+                <a-text id="menu-speed-val" value="180 deg/s" position="0.6 -0.3 0.05" align="center" width="4.5" color="#000000"></a-text>
                 <a-plane id="btn-speed-inc" class="clickable" position="1.35 -0.3 0.05" width="0.4" height="0.4" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
@@ -735,7 +775,7 @@
                 <a-plane id="btn-wind-dec" class="clickable" position="-0.3 -1.0 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
-                <a-text id="menu-wind-val" value="0" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
+                <a-text id="menu-wind-val" value="80" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
                 <a-plane id="btn-wind-inc" class="clickable" position="1.35 -1.0 0.05" width="0.4" height="0.4" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
@@ -745,13 +785,13 @@
                 <a-plane id="btn-inertia-dec" class="clickable" position="-0.3 -1.7 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
-                <a-text id="menu-inertia-val" value="20" position="0.6 -1.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                <a-text id="menu-inertia-val" value="80" position="0.6 -1.7 0.05" align="center" width="4.5" color="#000000"></a-text>
                 <a-plane id="btn-inertia-inc" class="clickable" position="1.35 -1.7 0.05" width="0.4" height="0.4" color="#388E3C">
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ -->
-                <a-text id="menu-version-val" value="v2.4.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v2.5.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VR Vertibird Simulator - Gentle Wind Effect</title>
+    <title>VR Vertibird Simulator - Wind 150 & Speed Radial Buzz</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
@@ -16,12 +16,13 @@
 
                 // Parametri regolabili da Menu
                 this.speedMultiplier = 90.0; 
-                this.windAmplitude = 0;    // Vento da 0 a 100 (default 0)
+                this.windAmplitude = 0;    // Vento da 0 a 150
 
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
+                this.currentAngularSpeed = 0; // Velocità radiale istantanea
 
-                // Gestione World Root e Scala Iniziale a 0.06
+                // Gestione World Root e Scala Iniziale
                 this.worldRoot = document.querySelector('#world-root');
                 this.currentScale = 0.06; 
                 this.isDragging = false;
@@ -40,15 +41,22 @@
                 this.speedText = document.querySelector('#menu-speed-val');
                 this.windText = document.querySelector('#menu-wind-val');
 
-                // Imposta scala iniziale 0.06
                 if (this.worldRoot && this.worldRoot.object3D) {
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
 
-                // --- SISTEMA AUDIO ---
+                // --- SISTEMA AUDIO DOPPIO (Motore + Wind Buzz) ---
                 this.audioCtx = null;
+                
+                // 1. Audio Motore
                 this.oscillator = null;
                 this.gainNode = null;
+
+                // 2. Audio "Wind Buzz" Radiale
+                this.windOsc = null;
+                this.windFilter = null;
+                this.windGain = null;
+                
                 this.audioInitialized = false;
 
                 this.initAudio = () => {
@@ -62,6 +70,7 @@
                         window.AudioContext = window.AudioContext || window.webkitAudioContext;
                         this.audioCtx = new AudioContext();
                         
+                        // Sintesi Motore
                         this.oscillator = this.audioCtx.createOscillator();
                         this.oscillator.type = 'sawtooth';
                         this.oscillator.frequency.setValueAtTime(30, this.audioCtx.currentTime);
@@ -72,6 +81,24 @@
                         this.oscillator.connect(this.gainNode);
                         this.gainNode.connect(this.audioCtx.destination);
                         this.oscillator.start();
+
+                        // Sintesi "Wind Buzz" (Fischio / Fruscio di velocità)
+                        this.windOsc = this.audioCtx.createOscillator();
+                        this.windOsc.type = 'triangle'; 
+                        this.windOsc.frequency.setValueAtTime(100, this.audioCtx.currentTime);
+
+                        this.windFilter = this.audioCtx.createBiquadFilter();
+                        this.windFilter.type = 'bandpass';
+                        this.windFilter.frequency.setValueAtTime(200, this.audioCtx.currentTime);
+                        this.windFilter.Q.setValueAtTime(3.0, this.audioCtx.currentTime); // Risonanza ventosa
+
+                        this.windGain = this.audioCtx.createGain();
+                        this.windGain.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
+
+                        this.windOsc.connect(this.windFilter);
+                        this.windFilter.connect(this.windGain);
+                        this.windGain.connect(this.audioCtx.destination);
+                        this.windOsc.start();
                         
                         this.audioInitialized = true;
                     } catch (e) {}
@@ -116,7 +143,8 @@
                     this.updateMenuUI();
                 });
                 if (btnWindInc) btnWindInc.addEventListener('click', () => {
-                    this.windAmplitude = Math.min(100, this.windAmplitude + 10);
+                    // Limite Vento esteso a 150
+                    this.windAmplitude = Math.min(150, this.windAmplitude + 10);
                     this.updateMenuUI();
                 });
 
@@ -204,13 +232,12 @@
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // --- 4. TURBOLENZE DEL VENTO MOLTO ATTENUATE ---
+                // --- 4. TURBOLENZE DEL VENTO (RANGE 0 - 150) ---
                 let windThrottleOffset = 0;
                 let windStickOffset = 0;
 
                 if (this.windAmplitude > 0) {
                     let normWind = this.windAmplitude / 100.0;
-                    // Coefficienti ridotti notevolmente per minimizzare l'invasività
                     windThrottleOffset = ((Math.sin(t * 2.3) * 0.05) + (Math.cos(t * 4.7) * 0.025)) * normWind;
                     windStickOffset = ((Math.sin(t * 1.9) * 0.08) + (Math.cos(t * 3.8) * 0.04)) * normWind;
                 }
@@ -245,8 +272,10 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 7. MOTO CIRCOLARE ---
+                // --- 7. MOTO CIRCOLARE E VELOCITÀ RADIALE ---
+                this.currentAngularSpeed = 0;
                 if (this.heliY > 0.315) {
+                    this.currentAngularSpeed = Math.abs(-speedFactor * effectiveThrottleInput * this.speedMultiplier); 
                     let angularSpeed = -speedFactor * effectiveThrottleInput * this.speedMultiplier; 
                     this.angle += angularSpeed * dt;
                 }
@@ -267,12 +296,24 @@
                     }
                 }
 
-                // --- 9. AUDIO ---
-                if (this.audioInitialized && this.oscillator && this.gainNode && this.audioCtx) {
+                // --- 9. AUDIO DOPPIO (Motore + Wind Buzz) ---
+                if (this.audioInitialized && this.audioCtx) {
+                    // Motore
                     let targetFreq = 30 + (effectiveThrottleInput * 70);
                     let targetVolume = effectiveThrottleInput > 0.01 ? 0.18 : 0.0;
                     this.oscillator.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.1);
                     this.gainNode.gain.setTargetAtTime(targetVolume, this.audioCtx.currentTime, 0.1);
+
+                    // Wind Buzz proporzionale alla velocità radiale
+                    let normRadialSpeed = Math.min(1.0, this.currentAngularSpeed / 300.0); // 0 a 1
+                    
+                    let targetWindOscFreq = 80 + (normRadialSpeed * 220);    // Frequenza fischio: 80Hz - 300Hz
+                    let targetFilterFreq = 150 + (normRadialSpeed * 1200);  // Banda passante: 150Hz - 1350Hz
+                    let targetWindVol = normRadialSpeed > 0.02 ? (normRadialSpeed * 0.22) : 0.0; // Volume fino a 0.22
+
+                    this.windOsc.frequency.setTargetAtTime(targetWindOscFreq, this.audioCtx.currentTime, 0.08);
+                    this.windFilter.frequency.setTargetAtTime(targetFilterFreq, this.audioCtx.currentTime, 0.08);
+                    this.windGain.gain.setTargetAtTime(targetWindVol, this.audioCtx.currentTime, 0.08);
                 }
             }
         });

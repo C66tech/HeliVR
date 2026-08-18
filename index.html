@@ -2,12 +2,12 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>VertiVR Simulator - Black Text & Spaced Menu v1.1.5</title>
+    <title>VertiVR Simulator - Horizontal Inertia v1.2.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "1.1.5"; // Versione aggiornata
+                this.version = "1.2.0"; // Versione aggiornata
                 this.angle = 0;        
                 this.heliY = 0.31;     
                 this.radius = 4.5;     
@@ -15,13 +15,18 @@
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
 
+                // --- INERZIA MOTO CIRCOLARE ---
+                this.angularVelocity = 0; // Velocità di rotazione corrente (deg/s)
+                this.angularAcceleration = 180.0; // Quanto velocemente accelera (deg/s^2)
+                this.friction = 1.2; // Attrito dell'aria che rallenta l'inerzia quando non si dà gas/pitch
+
                 // Parametri regolabili da Menu
                 this.speedMultiplier = 90.0; 
                 this.windAmplitude = 0;    // Vento da 0 a 150
 
                 this.rotorAngle = 0;
                 this.tailRotorAngle = 0;
-                this.currentAngularSpeed = 0; // Velocità radiale istantanea
+                this.currentAngularSpeed = 0; // Velocità radiale istantanea per l'audio
 
                 // Gestione World Root e Scala Iniziale
                 this.worldRoot = document.querySelector('#world-root');
@@ -274,12 +279,29 @@
                     this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
                 }
 
-                // --- 7. MOTO CIRCOLARE E VELOCITÀ RADIALE ---
-                this.currentAngularSpeed = 0;
+                // --- 7. MOTO CIRCOLARE CON INERZIA FISICA ---
                 if (this.heliY > 0.315) {
-                    this.currentAngularSpeed = Math.abs(-speedFactor * effectiveThrottleInput * this.speedMultiplier); 
-                    let angularSpeed = -speedFactor * effectiveThrottleInput * this.speedMultiplier; 
-                    this.angle += angularSpeed * dt;
+                    // La spinta (pitch * potenza motore) genera un'accelerazione angolare
+                    let thrust = -speedFactor * effectiveThrottleInput * this.speedMultiplier * 2.5;
+                    
+                    // Applichiamo la spinta alla velocità angolare
+                    this.angularVelocity += thrust * dt;
+
+                    // Attrito dell'aria (decollo/resistenza)
+                    this.angularVelocity -= this.angularVelocity * this.friction * dt;
+
+                    // Limite velocità massima
+                    let maxSpeed = this.speedMultiplier * 2.0;
+                    this.angularVelocity = Math.max(-maxSpeed, Math.min(maxSpeed, this.angularVelocity));
+
+                    // Aggiornamento angolo di rotazione
+                    this.angle += this.angularVelocity * dt;
+                    this.currentAngularSpeed = Math.abs(this.angularVelocity);
+                } else {
+                    // Se a terra, l'attrito col terreno ferma rapidamente la rotazione
+                    this.angularVelocity -= this.angularVelocity * 8.0 * dt;
+                    if (Math.abs(this.angularVelocity) < 0.1) this.angularVelocity = 0;
+                    this.currentAngularSpeed = 0;
                 }
 
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
@@ -306,7 +328,7 @@
                     this.oscillator.frequency.setTargetAtTime(targetFreq, this.audioCtx.currentTime, 0.1);
                     this.gainNode.gain.setTargetAtTime(targetVolume, this.audioCtx.currentTime, 0.1);
 
-                    // Wind Buzz proporzionale alla velocità radiale
+                    // Wind Buzz proporzionale alla velocità radiale reale da inerzia
                     let normRadialSpeed = Math.min(1.0, this.currentAngularSpeed / 300.0);
                     
                     let targetWindOscFreq = 80 + (normRadialSpeed * 220);    
@@ -442,12 +464,12 @@
                 </a-entity>
             </a-entity>
 
-            <!-- PANNELLO MENÙ IN FORMATO VERTICALE 9:16 (LARGHEZZA=3.6, ALTEZZA=6.4) -->
+            <!-- PANNELLO MENÙ IN FORMATO VERTICALE 9:16 -->
             <a-entity id="menu-panel" position="-10.5 3.5 0" rotation="0 30 0" visible="true">
                 <!-- Sfondo Mappato 9:16 -->
                 <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                <!-- CONTROLLI NELLA PARTE INFERIORE CON TESTO NERO E COLONNE BEN DISTRIBUITE -->
+                <!-- CONTROLLI NELLA PARTE INFERIORE -->
                 <!-- RIGA 1: SPEED (Y = -0.5) -->
                 <a-text value="Speed" position="-1.5 -0.5 0.05" align="left" width="5.5" color="#000000"></a-text>
                 
@@ -475,7 +497,7 @@
                 </a-plane>
 
                 <!-- INDICATORE VERSIONE IN FONDO AL MENÙ (Y = -2.8) -->
-                <a-text id="menu-version-val" value="v1.1.5" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v1.2.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
         </a-entity> <!-- /world-root -->

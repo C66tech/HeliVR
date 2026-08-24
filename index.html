@@ -31,11 +31,11 @@
         // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "3.5.0"; 
+                this.version = "3.6.0"; 
                 this.angle = 0;        
                 this.heliY = 0.25;     
                 this.minHeliY = 0.25;  
-                this.radius = 5.5;     // Raggio di volo adeguato all'allungamento dell'asta
+                this.radius = 5.8;     // Raggio di volo aggiornato all'asta allungata
                 
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
@@ -418,22 +418,29 @@
 
         <a-entity id="world-root" position="0 0.8 -0.8" rotation="0 0 0" scale="0.06 0.06 0.06">
             
-            <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="src: #terrain-img; roughness: 0.8"></a-box>
+            <!-- Base allargata da 12x12 a 16x16 -->
+            <a-box position="0 -0.05 0" width="16" height="0.1" depth="16" material="src: #terrain-img; roughness: 0.8"></a-box>
             
+            <!-- Staccionata riposizionata sui bordi del nuovo piano 16x16 -->
             <a-entity id="fence">
-                <a-box position="-6 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="6 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="-6 0.3 6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="0 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="-6 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="0 0.18 -6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
-                <a-box position="0 0.45 -6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
-                <a-box position="0 0.18 6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
-                <a-box position="0 0.45 6" width="12" height="0.08" depth="0.05" material="color: #D84315"></a-box>
-                <a-box position="-6 0.18 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
-                <a-box position="-6 0.45 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
-                <a-box position="6 0.18 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
-                <a-box position="6 0.45 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
+                <a-box position="-8 0.3 -8" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="8 0.3 -8" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="-8 0.3 8" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="8 0.3 8" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="0 0.3 -8" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="-8 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="0 0.3 8" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="8 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+
+                <a-box position="0 0.18 -8" width="16" height="0.08" depth="0.05" material="color: #D84315"></a-box>
+                <a-box position="0 0.45 -8" width="16" height="0.08" depth="0.05" material="color: #D84315"></a-box>
+                <a-box position="0 0.18 8" width="16" height="0.08" depth="0.05" material="color: #D84315"></a-box>
+                <a-box position="0 0.45 8" width="16" height="0.08" depth="0.05" material="color: #D84315"></a-box>
+
+                <a-box position="-8 0.18 0" width="0.05" height="0.08" depth="16" material="color: #D84315"></a-box>
+                <a-box position="-8 0.45 0" width="0.05" height="0.08" depth="16" material="color: #D84315"></a-box>
+                <a-box position="8 0.18 0" width="0.05" height="0.08" depth="16" material="color: #D84315"></a-box>
+                <a-box position="8 0.45 0" width="0.05" height="0.08" depth="16" material="color: #D84315"></a-box>
             </a-entity>
 
             <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
@@ -441,25 +448,25 @@
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 0.85 0" vertibird-flight>
                 
-                <!-- Asta allungata (lunghezza da 4.5 a 5.2, centrata a 2.6) -->
-                <a-box id="rod" position="2.6 0 0" width="5.2" height="0.02" depth="0.02" color="#FFCC00"></a-box>
+                <!-- Asta allungata verso l'elicottero (larghezza 5.8, centro a 2.9) -->
+                <a-box id="rod" position="2.9 0 0" width="5.8" height="0.02" depth="0.02" color="#FFCC00"></a-box>
                 
-                <!-- Wrapper dell'elicottero posizionato a 5.5 -->
-                <a-entity id="heli-wrapper" position="5.5 0 0">
+                <!-- Wrapper posizionato all'estremità dell'asta (5.8) -->
+                <a-entity id="heli-wrapper" position="5.8 0 0">
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
                             
-                            <!-- MODELLO 3D: Posizione X avanzata da -0.3 a -0.15 -->
+                            <!-- MODELLO 3D: Avanzato a position X = -0.05 -->
                             <a-gltf-model 
                                 src="#verti-model" 
-                                position="-0.15 0.2 0" 
+                                position="-0.05 0.2 0" 
                                 scale="2.1 2.1 2.1" 
                                 rotation="0 180 0"
                                 gltf-colorizer="color: #D32F2F">
                             </a-gltf-model>
 
-                            <!-- ELICA -->
-                            <a-entity position="0 0.6 0">
+                            <!-- ELICA: Abbassata a position Y = 0.5 -->
+                            <a-entity position="0 0.5 0">
                                 <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #333"></a-cylinder>
                                 <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
@@ -500,7 +507,7 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <a-text id="menu-version-val" value="v3.5.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v3.6.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
         </a-entity>
 

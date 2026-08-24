@@ -32,7 +32,7 @@
         // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "3.2.0"; 
+                this.version = "3.3.0"; 
                 this.angle = 0;        
                 this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
@@ -411,7 +411,8 @@
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
             
-            <a-asset-item id="verti-model" src="Vertimodel/scene.gltf"></a-asset-item>
+            <!-- Percorso aggiornato del modello nella root -->
+            <a-asset-item id="verti-model" src="Vertimeshy-reduced.gltf"></a-asset-item>
         </a-assets>
 
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
@@ -442,14 +443,13 @@
             <!-- VERTIBIRD E MODELLO 3D -->
             <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
                 
-                <!-- Barra che collega il perno centrale all'elicottero -->
                 <a-box id="rod" position="2.25 0 0" width="4.5" height="0.02" depth="0.02" color="#FFCC00"></a-box>
                 
                 <a-entity id="heli-wrapper" position="4.5 0 0">
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
                             
-                            <!-- MODELLO 3D: Scala ridotta (2.1), posizione Y alzata (0.2 rispetto alla barra) -->
+                            <!-- MODELLO 3D DALLA ROOT -->
                             <a-gltf-model 
                                 src="#verti-model" 
                                 position="0 0.2 0" 
@@ -458,7 +458,7 @@
                                 gltf-colorizer="color: #D32F2F">
                             </a-gltf-model>
 
-                            <!-- ELICA: Altezza ricalcolata a Y=0.9 per aderire al nuovo tetto ridimensionato -->
+                            <!-- ELICA -->
                             <a-entity position="0 0.9 0">
                                 <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #333"></a-cylinder>
                                 <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
@@ -500,7 +500,7 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <a-text id="menu-version-val" value="v3.2.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v3.3.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
         </a-entity>
 

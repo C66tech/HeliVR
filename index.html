@@ -31,11 +31,11 @@
         // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "3.4.0"; 
+                this.version = "3.5.0"; 
                 this.angle = 0;        
-                this.heliY = 0.25;     // Abbassato per far toccare terra al modello
+                this.heliY = 0.25;     
                 this.minHeliY = 0.25;  
-                this.radius = 5.2;     // Raggio di volo aumentato (da 4.5 a 5.2)
+                this.radius = 5.5;     // Raggio di volo adeguato all'allungamento dell'asta
                 
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
@@ -291,7 +291,6 @@
                 this.heliY += (targetHeliY - this.heliY) * dt * 6.0;
                 if (this.heliY < this.minHeliY) this.heliY = this.minHeliY;
 
-                // Calcolo cerniera aggiornato all'altezza base 0.85
                 let hingeAngleRad = Math.asin((this.heliY - 0.85) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
 
@@ -439,27 +438,27 @@
 
             <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
 
-            <!-- VERTIBIRD (Base abbassata a Y=0.85) -->
+            <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 0.85 0" vertibird-flight>
                 
-                <!-- Asta fisicamente invariata (lunghezza 4.5, posizione 2.25) -->
-                <a-box id="rod" position="2.25 0 0" width="4.5" height="0.02" depth="0.02" color="#FFCC00"></a-box>
+                <!-- Asta allungata (lunghezza da 4.5 a 5.2, centrata a 2.6) -->
+                <a-box id="rod" position="2.6 0 0" width="5.2" height="0.02" depth="0.02" color="#FFCC00"></a-box>
                 
-                <!-- Wrapper posizionato a 5.2 X (amplia il raggio e fa arretrare il punto d'attacco dell'asta) -->
-                <a-entity id="heli-wrapper" position="5.2 0 0">
+                <!-- Wrapper dell'elicottero posizionato a 5.5 -->
+                <a-entity id="heli-wrapper" position="5.5 0 0">
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
                             
-                            <!-- MODELLO 3D: Arretramento locale applicato (position X = -0.3) -->
+                            <!-- MODELLO 3D: Posizione X avanzata da -0.3 a -0.15 -->
                             <a-gltf-model 
                                 src="#verti-model" 
-                                position="-0.3 0.2 0" 
+                                position="-0.15 0.2 0" 
                                 scale="2.1 2.1 2.1" 
                                 rotation="0 180 0"
                                 gltf-colorizer="color: #D32F2F">
                             </a-gltf-model>
 
-                            <!-- ELICA: Spostata verso il basso a Y=0.6 -->
+                            <!-- ELICA -->
                             <a-entity position="0 0.6 0">
                                 <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #333"></a-cylinder>
                                 <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
@@ -501,7 +500,7 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <a-text id="menu-version-val" value="v3.4.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v3.5.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
         </a-entity>
 

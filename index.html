@@ -6,12 +6,33 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - Free Flight</title>
+    <title>VertiVR Simulator - Custom Model</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
+        // COMPONENTE PER COLORARE IL MODELLO GLTF
+        AFRAME.registerComponent('gltf-colorizer', {
+            schema: {
+                color: {type: 'color', default: '#D32F2F'} // Rosso di default
+            },
+            init: function () {
+                this.el.addEventListener('model-loaded', () => {
+                    const mesh = this.el.getObject3D('mesh');
+                    if (mesh) {
+                        mesh.traverse((node) => {
+                            if (node.isMesh && node.material) {
+                                // Imposta il nuovo colore per tutti i materiali della mesh
+                                node.material.color.set(this.data.color);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "3.0.0"; 
+                this.version = "3.1.0"; 
                 this.angle = 0;        
                 this.heliY = 0.39;     
                 this.minHeliY = 0.39;  
@@ -390,8 +411,7 @@
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
             
-            <!-- Inserisci qui il nome corretto del tuo modello GLTF esportato -->
-            <a-asset-item id="verti-model" src="Vertimeshy-reduced.gltf"></a-asset-item>
+            <a-asset-item id="verti-model" src="Vertimodel/scene.gltf"></a-asset-item>
         </a-assets>
 
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
@@ -399,10 +419,8 @@
 
         <a-entity id="world-root" position="0 0.8 -0.8" rotation="0 0 0" scale="0.06 0.06 0.06">
             
-            <!-- Base -->
             <a-box position="0 -0.05 0" width="12" height="0.1" depth="12" material="src: #terrain-img; roughness: 0.8"></a-box>
             
-            <!-- Staccionata (Mantenuta come riferimento spaziale visivo) -->
             <a-entity id="fence">
                 <a-box position="-6 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
                 <a-box position="6 0.3 -6" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
@@ -419,27 +437,29 @@
                 <a-box position="6 0.45 0" width="0.05" height="0.08" depth="12" material="color: #D84315"></a-box>
             </a-entity>
 
-            <!-- Perno Centrale -->
             <a-cone position="0 0.6 0" radius-bottom="0.3" radius-top="0.05" height="1.2" color="#FFCC00"></a-cone>
 
             <!-- VERTIBIRD E MODELLO 3D -->
             <a-entity id="vertibird" position="0 1.1 0" vertibird-flight>
                 
-                <!-- Asta Meccanica -->
                 <a-box id="rod" position="2.25 0 0" width="4.5" height="0.02" depth="0.02" color="#FFCC00"></a-box>
                 
                 <a-entity id="heli-wrapper" position="4.5 0 0">
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
                             
-                            <!-- IL TUO MODELLO 3D DA VERTIMODEL -->
-                            <!-- Modifica l'attributo 'position' o 'scale' se il modello non risulta perfettamente centrato -->
-                            <a-gltf-model src="#verti-model" position="0 0 0"></a-gltf-model>
+                            <!-- MODELLO 3D: SCALA x3, ROTAZIONE 180 E COMPONENTE COLORE (Rosso) -->
+                            <a-gltf-model 
+                                src="#verti-model" 
+                                position="0 0 0" 
+                                scale="3 3 3" 
+                                rotation="0 180 0"
+                                gltf-colorizer="color: #D32F2F">
+                            </a-gltf-model>
 
-                            <!-- ELICA (Mantenuta in primitive e posizionata sopra al modello) -->
-                            <!-- Regola l'asse Y della posizione se l'elica penetra nel modello 3D -->
-                            <a-entity position="0 0.4 0">
-                                <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #D32F2F"></a-cylinder>
+                            <!-- ELICA (Sollevata da Y=0.4 a Y=1.0 per compensare la scala del modello) -->
+                            <a-entity position="0 1.0 0">
+                                <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #333"></a-cylinder>
                                 <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
@@ -449,7 +469,6 @@
                 </a-entity>
             </a-entity>
 
-            <!-- PANNELLO MENÙ HUD -->
             <a-entity id="menu-panel" position="-10.5 3.5 0" rotation="0 30 0" visible="true">
                 <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
@@ -480,11 +499,10 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <a-text id="menu-version-val" value="v3.0.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v3.1.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
         </a-entity>
 
-        <!-- Camera e Giocatore -->
         <a-entity id="rig" position="0 0 0">
             <a-camera position="0 1.5 0"></a-camera>
             <a-entity id="right-hand" oculus-touch-controls="hand: right" raycaster="objects: .clickable" laser-controls="hand: right"></a-entity>

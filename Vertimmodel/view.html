@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vertimmodel - Visualizzatore 3D Mattel Vertibird</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            overflow: hidden;
+            background: #18181c;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #ffffff;
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(25, 25, 30, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 18px 22px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.37);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 320px;
+            z-index: 10;
+        }
+        h1 {
+            font-size: 18px;
+            margin-bottom: 6px;
+            color: #ff4d4d;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        p {
+            font-size: 13px;
+            margin-bottom: 14px;
+            color: #aaaaaa;
+            line-height: 1.4;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            background: #ff4d4d;
+            color: white;
+            border: none;
+            padding: 9px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            transition: all 0.2s ease;
+            flex: 1;
+        }
+        .btn:hover {
+            background: #e63939;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background: #33333d;
+            color: #dddddd;
+        }
+        .btn-secondary:hover {
+            background: #444452;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            font-weight: 500;
+            background: rgba(20, 20, 25, 0.9);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 16px 32px;
+            border-radius: 30px;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #888;
+            pointer-events: none;
+        }
+    </style>
+
+    <!-- Importmap Three.js -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="ui">
+        <h1>🚁 Vertibird 3D Viewer</h1>
+        <p>Modello Low-Poly Mattel Vertibird (Struttura Rossa + Logo)</p>
+        <div class="btn-group">
+            <button class="btn" id="btn-reset">Reset Cam</button>
+            <button class="btn btn-secondary" id="btn-rotate">Auto-Ruota</button>
+        </div>
+    </div>
+
+    <div id="loading">Caricamento modello 3D in corso...</div>
+    <div id="instructions">Ruota: Clic Sx | Pan: Clic Dx | Zoom: Rotellina</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        const container = document.getElementById('canvas-container');
+        const loadingEl = document.getElementById('loading');
+
+        // 1. Scena
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x18181c);
+        scene.fog = new THREE.FogExp2(0x18181c, 0.08);
+
+        // 2. Camera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(2.2, 1.0, 2.2);
+
+        // 3. Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        container.appendChild(renderer.domElement);
+
+        // 4. Controlli
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 + 0.05; // Non scendere troppo sotto il pavimento
+
+        // 5. Illuminazione
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xffffff, 2.2);
+        mainLight.position.set(5, 8, 5);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 1024;
+        mainLight.shadow.mapSize.height = 1024;
+        scene.add(mainLight);
+
+        const fillLight = new THREE.DirectionalLight(0x7090ff, 0.8);
+        fillLight.position.set(-5, 4, -5);
+        scene.add(fillLight);
+
+        // 6. Griglia e Ombra
+        const gridHelper = new THREE.GridHelper(10, 20, 0xff4d4d, 0x333344);
+        gridHelper.position.y = -0.3;
+        scene.add(gridHelper);
+
+        // 7. Caricamento Modello GLTF/GLB
+        const loader = new GLTFLoader();
+
+        // Cerca prima il file GLB, altrimenti riprova con GLTF
+        const modelFiles = [
+            './mattel_vertibird_lowpoly.glb',
+            './mattel_vertibird.gltf'
+        ];
+
+        let loadedModel = null;
+
+        function loadModel(index) {
+            if (index >= modelFiles.length) {
+                loadingEl.innerText = "Impossibile trovare il file del modello (.glb o .gltf) nella cartella.";
+                loadingEl.style.color = "#ff4d4d";
+                return;
+            }
+
+            loader.load(
+                modelFiles[index],
+                (gltf) => {
+                    loadedModel = gltf.scene;
+                    
+                    // Centra il modello
+                    const box = new THREE.Box3().setFromObject(loadedModel);
+                    const center = box.getCenter(new THREE.Vector3());
+                    loadedModel.position.sub(center);
+                    loadedModel.position.y += (box.max.y - box.min.y) / 2 - 0.28;
+
+                    // Attiva ombre sui mesh
+                    loadedModel.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+
+                    scene.add(loadedModel);
+                    
+                    loadingEl.style.opacity = '0';
+                    setTimeout(() => loadingEl.remove(), 400);
+                },
+                (xhr) => {
+                    if (xhr.lengthComputable) {
+                        const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                        loadingEl.innerText = `Caricamento modello: ${percent}%`;
+                    }
+                },
+                (error) => {
+                    console.warn(`Fallito caricamento da ${modelFiles[index]}, provo il successivo...`);
+                    loadModel(index + 1);
+                }
+            );
+        }
+
+        loadModel(0);
+
+        // 8. Eventi UI
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            camera.position.set(2.2, 1.0, 2.2);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        });
+
+        let isAutoRotating = false;
+        const btnRotate = document.getElementById('btn-rotate');
+        btnRotate.addEventListener('click', () => {
+            isAutoRotating = !isAutoRotating;
+            controls.autoRotate = isAutoRotating;
+            controls.autoRotateSpeed = 2.5;
+            btnRotate.style.background = isAutoRotating ? '#ff4d4d' : '#33333d';
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 9. Loop di Render
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

@@ -55,7 +55,7 @@
         // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "4.3.0"; 
+                this.version = "4.4.0"; 
                 this.angle = 0;        
                 this.heliY = 0.25;     
                 this.minHeliY = 0.25;  
@@ -442,7 +442,7 @@
 
         <a-entity id="world-root" position="0 0.8 -0.8" rotation="0 0 0" scale="0.06 0.06 0.06">
             
-            <!-- Base terreno con componente fallback azzurro trasparente al 30% -->
+            <!-- Base terreno -->
             <a-box 
                 position="0 -0.05 0" 
                 width="16.8" 
@@ -487,7 +487,7 @@
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
                             
-                            <!-- MODELLO 3D con componente "make-vivid" per resa colore brillante -->
+                            <!-- MODELLO 3D -->
                             <a-gltf-model 
                                 src="#verti-model" 
                                 make-vivid
@@ -508,11 +508,12 @@
                 </a-entity>
             </a-entity>
 
+            <!-- MENU PANEL (Spostati i bottoni rossi '-' a X = -0.05 per evitare sovrapposizioni) -->
             <a-entity id="menu-panel" position="-10.5 3.5 0" rotation="0 30 0" visible="true">
                 <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
                 <a-text value="Speed" position="-1.5 -0.3 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-speed-dec" class="clickable" position="-0.3 -0.3 0.05" width="0.4" height="0.4" color="#D32F2F">
+                <a-plane id="btn-speed-dec" class="clickable" position="-0.05 -0.3 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
                 <a-text id="menu-speed-val" value="180 deg/s" position="0.6 -0.3 0.05" align="center" width="4.5" color="#000000"></a-text>
@@ -521,7 +522,7 @@
                 </a-plane>
 
                 <a-text value="Wobbling" position="-1.5 -1.0 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-wind-dec" class="clickable" position="-0.3 -1.0 0.05" width="0.4" height="0.4" color="#D32F2F">
+                <a-plane id="btn-wind-dec" class="clickable" position="-0.05 -1.0 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
                 <a-text id="menu-wind-val" value="80" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
@@ -530,7 +531,7 @@
                 </a-plane>
 
                 <a-text value="Inertia" position="-1.5 -1.7 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-inertia-dec" class="clickable" position="-0.3 -1.7 0.05" width="0.4" height="0.4" color="#D32F2F">
+                <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 -1.7 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
                 <a-text id="menu-inertia-val" value="80" position="0.6 -1.7 0.05" align="center" width="4.5" color="#000000"></a-text>
@@ -538,7 +539,7 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <a-text id="menu-version-val" value="v4.3.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v4.4.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
         </a-entity>
 

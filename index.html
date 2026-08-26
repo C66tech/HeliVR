@@ -27,13 +27,13 @@
             }
         });
 
-        // COMPONENTE FALLBACK PER TERRENO (Azzurro 30% trasparente se manca l'immagine)
+        // COMPONENTE FALLBACK PER TERRENO (Grigio-azzurro chiaro 30% trasparente se manca l'immagine)
         AFRAME.registerComponent('texture-fallback', {
             init: function () {
                 const applyFallback = () => {
                     this.el.setAttribute('material', {
                         src: '',
-                        color: '#87CEEB',
+                        color: '#B0E0E6',
                         transparent: true,
                         opacity: 0.3,
                         roughness: 0.8
@@ -55,7 +55,7 @@
         // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "4.4.0"; 
+                this.version = "4.6.0"; 
                 this.angle = 0;        
                 this.heliY = 0.25;     
                 this.minHeliY = 0.25;  
@@ -434,6 +434,9 @@
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
             
+            <!-- Asset Immagine Frontalino Perno -->
+            <img id="frontalino-img" src="frontalino.jpg" crossorigin="anonymous">
+            
             <a-asset-item id="verti-model" src="VertilowRed.glb"></a-asset-item>
         </a-assets>
 
@@ -442,13 +445,13 @@
 
         <a-entity id="world-root" position="0 0.8 -0.8" rotation="0 0 0" scale="0.06 0.06 0.06">
             
-            <!-- Base terreno -->
+            <!-- Base terreno (grigio-azzurro chiaro #B0E0E6 trasparente al 30%) -->
             <a-box 
                 position="0 -0.05 0" 
                 width="16.8" 
                 height="0.1" 
                 depth="16.8" 
-                material="src: #terrain-img; roughness: 0.8"
+                material="src: #terrain-img; color: #B0E0E6; transparent: true; opacity: 0.3; roughness: 0.8"
                 texture-fallback>
             </a-box>
             
@@ -475,7 +478,18 @@
             </a-entity>
 
             <!-- STRUTTURA CENTRALE -->
+            <!-- 1. Parallelepipedo Bianco -->
             <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#FFFFFF"></a-box>
+            
+            <!-- 2. Frontalino Mappato (Stretcha automaticamente per coprire tutto il plane 1.8x0.6) -->
+            <a-plane 
+                position="0 0.3 0.901" 
+                width="1.8" 
+                height="0.6" 
+                material="src: #frontalino-img; shader: flat; repeat: 1 1">
+            </a-plane>
+
+            <!-- 3. Sfera Gialla -->
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
             <!-- VERTIBIRD -->
@@ -508,7 +522,7 @@
                 </a-entity>
             </a-entity>
 
-            <!-- MENU PANEL (Spostati i bottoni rossi '-' a X = -0.05 per evitare sovrapposizioni) -->
+            <!-- MENU PANEL -->
             <a-entity id="menu-panel" position="-10.5 3.5 0" rotation="0 30 0" visible="true">
                 <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
@@ -539,7 +553,7 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <a-text id="menu-version-val" value="v4.4.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v4.6.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
         </a-entity>
 

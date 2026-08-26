@@ -12,7 +12,7 @@
         // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "4.0.0"; 
+                this.version = "4.1.0"; 
                 this.angle = 0;        
                 this.heliY = 0.25;     
                 this.minHeliY = 0.25;  
@@ -391,7 +391,8 @@
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
             
-            <a-asset-item id="verti-model" src="VertilowRed.gbl"></a-asset-item>
+            <!-- Corretto nome del modello in .glb -->
+            <a-asset-item id="verti-model" src="VertilowRed.glb"></a-asset-item>
         </a-assets>
 
         <a-light type="ambient" color="#FFF" intensity="0.8"></a-light>
@@ -422,9 +423,9 @@
                 <a-box position="7 0.45 0" width="0.05" height="0.08" depth="14" material="color: #D84315"></a-box>
             </a-entity>
 
-            <!-- STRUTTURA CENTRALE -->
-            <a-box position="0 0.2 0" width="1.8" height="0.4" depth="1.8" color="#FFFFFF"></a-box>
-            <a-sphere position="0 0.4 0" radius="0.675" color="#FFCC00"></a-sphere>
+            <!-- STRUTTURA CENTRALE: Parallelepipedo Bianco alto 0.6 e Sfera Gialla sollevata a Y = 0.6 -->
+            <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#FFFFFF"></a-box>
+            <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 0.85 0" vertibird-flight>
@@ -435,15 +436,15 @@
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
                             
-                            <!-- MODELLO 3D: rimosso gltf-colorizer per utilizzare le texture originali del file -->
+                            <!-- MODELLO 3D: Scala aumentata del 15% (da 2.1 a 2.415) -->
                             <a-gltf-model 
                                 src="#verti-model" 
                                 position="-0.10 0.2 0" 
-                                scale="2.1 2.1 2.1" 
+                                scale="2.415 2.415 2.415" 
                                 rotation="0 180 0">
                             </a-gltf-model>
 
-                            <!-- ELICA: Abbassata leggermente da Y = 0.55 a Y = 0.48 -->
+                            <!-- ELICA -->
                             <a-entity position="0 0.48 0">
                                 <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #333"></a-cylinder>
                                 <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
@@ -485,7 +486,7 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <a-text id="menu-version-val" value="v4.0.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v4.1.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
         </a-entity>
 

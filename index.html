@@ -12,11 +12,11 @@
         // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "4.1.0"; 
+                this.version = "4.2.0"; 
                 this.angle = 0;        
                 this.heliY = 0.25;     
                 this.minHeliY = 0.25;  
-                this.radius = 5.4;     
+                this.radius = 6.48;    // Aumentato del 20% (da 5.4 a 6.48)
                 
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
@@ -391,7 +391,6 @@
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
             
-            <!-- Corretto nome del modello in .glb -->
             <a-asset-item id="verti-model" src="VertilowRed.glb"></a-asset-item>
         </a-assets>
 
@@ -400,43 +399,47 @@
 
         <a-entity id="world-root" position="0 0.8 -0.8" rotation="0 0 0" scale="0.06 0.06 0.06">
             
-            <a-box position="0 -0.05 0" width="14" height="0.1" depth="14" material="src: #terrain-img; roughness: 0.8"></a-box>
+            <!-- Base allargata del 20% (da 14x14 a 16.8x16.8) -->
+            <a-box position="0 -0.05 0" width="16.8" height="0.1" depth="16.8" material="src: #terrain-img; roughness: 0.8"></a-box>
             
+            <!-- Staccionata su bordi 16.8x16.8 (coordinate ±8.4) -->
             <a-entity id="fence">
-                <a-box position="-7 0.3 -7" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="7 0.3 -7" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="-7 0.3 7" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="7 0.3 7" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="0 0.3 -7" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="-7 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="0 0.3 7" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
-                <a-box position="7 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="-8.4 0.3 -8.4" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="8.4 0.3 -8.4" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="-8.4 0.3 8.4" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="8.4 0.3 8.4" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="0 0.3 -8.4" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="-8.4 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="0 0.3 8.4" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
+                <a-box position="8.4 0.3 0" width="0.18" height="0.65" depth="0.18" material="color: #D84315"></a-box>
 
-                <a-box position="0 0.18 -7" width="14" height="0.08" depth="0.05" material="color: #D84315"></a-box>
-                <a-box position="0 0.45 -7" width="14" height="0.08" depth="0.05" material="color: #D84315"></a-box>
-                <a-box position="0 0.18 7" width="14" height="0.08" depth="0.05" material="color: #D84315"></a-box>
-                <a-box position="0 0.45 7" width="14" height="0.08" depth="0.05" material="color: #D84315"></a-box>
+                <a-box position="0 0.18 -8.4" width="16.8" height="0.08" depth="0.05" material="color: #D84315"></a-box>
+                <a-box position="0 0.45 -8.4" width="16.8" height="0.08" depth="0.05" material="color: #D84315"></a-box>
+                <a-box position="0 0.18 8.4" width="16.8" height="0.08" depth="0.05" material="color: #D84315"></a-box>
+                <a-box position="0 0.45 8.4" width="16.8" height="0.08" depth="0.05" material="color: #D84315"></a-box>
 
-                <a-box position="-7 0.18 0" width="0.05" height="0.08" depth="14" material="color: #D84315"></a-box>
-                <a-box position="-7 0.45 0" width="0.05" height="0.08" depth="14" material="color: #D84315"></a-box>
-                <a-box position="7 0.18 0" width="0.05" height="0.08" depth="14" material="color: #D84315"></a-box>
-                <a-box position="7 0.45 0" width="0.05" height="0.08" depth="14" material="color: #D84315"></a-box>
+                <a-box position="-8.4 0.18 0" width="0.05" height="0.08" depth="16.8" material="color: #D84315"></a-box>
+                <a-box position="-8.4 0.45 0" width="0.05" height="0.08" depth="16.8" material="color: #D84315"></a-box>
+                <a-box position="8.4 0.18 0" width="0.05" height="0.08" depth="16.8" material="color: #D84315"></a-box>
+                <a-box position="8.4 0.45 0" width="0.05" height="0.08" depth="16.8" material="color: #D84315"></a-box>
             </a-entity>
 
-            <!-- STRUTTURA CENTRALE: Parallelepipedo Bianco alto 0.6 e Sfera Gialla sollevata a Y = 0.6 -->
+            <!-- STRUTTURA CENTRALE -->
             <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#FFFFFF"></a-box>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 0.85 0" vertibird-flight>
                 
-                <a-box id="rod" position="2.7 0 0" width="5.4" height="0.02" depth="0.02" color="#FFCC00"></a-box>
+                <!-- Asta aumentata del 20% (larghezza 6.48, centro a 3.24) e colorata di grigio -->
+                <a-box id="rod" position="3.24 0 0" width="6.48" height="0.02" depth="0.02" color="#808080"></a-box>
                 
-                <a-entity id="heli-wrapper" position="5.4 0 0">
+                <!-- Wrapper posizionato alla fine dell'asta a 6.48 -->
+                <a-entity id="heli-wrapper" position="6.48 0 0">
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
                             
-                            <!-- MODELLO 3D: Scala aumentata del 15% (da 2.1 a 2.415) -->
+                            <!-- MODELLO 3D -->
                             <a-gltf-model 
                                 src="#verti-model" 
                                 position="-0.10 0.2 0" 
@@ -486,7 +489,7 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <a-text id="menu-version-val" value="v4.1.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v4.2.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
         </a-entity>
 

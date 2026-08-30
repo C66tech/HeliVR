@@ -9,7 +9,7 @@
     <title>VertiVR Simulator - Custom Model</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE PER LA TELECAMERA SECONDARIA (LOOKAT DINAMICO AL GANCIO)
+        // COMPONENTE PER LA TELECAMERA SECONDARIA (LOOKAT DINAMICO ALLA CALAMITA DEL GANCIO)
         AFRAME.registerComponent('pip-camera', {
             schema: { monitor: {type: 'selector'} },
             init: function () {
@@ -26,7 +26,7 @@
                 const scene = this.el.sceneEl.object3D;
                 if (!renderer || !scene) return;
 
-                // Punta esattamente al centro della sfera del gancio (#hook-magnet)
+                // Punta esattamente al centro della calamita del gancio (#hook-magnet)
                 const targetEl = document.querySelector('#hook-magnet');
                 if (targetEl && targetEl.object3D) {
                     targetEl.object3D.getWorldPosition(this.targetPos);
@@ -84,10 +84,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 13.0.0 - CUBO ROSSO + SFERE VERDI/ROSSE)
+        // LOGICA DI VOLO E FISICA (V 15.0.0 - ASTA ALLUNGATA DEL 10%)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "13.0.0"; 
+                this.version = "15.0.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -114,7 +114,7 @@
                 this.targetWorldPos = new THREE.Vector3();
                 this.camWorldPos = new THREE.Vector3();
                 this.hookL = new THREE.Vector3();
-                this.cavL = new THREE.Vector3();
+                this.objL = new THREE.Vector3();
                 this.platL = new THREE.Vector3();
                 this.heliL = new THREE.Vector3();
 
@@ -143,8 +143,8 @@
 
                 this.hookArea = document.querySelector('#hook-area');
                 this.hookMagnet = document.querySelector('#hook-magnet');
-                this.cavMagnet = document.querySelector('#cavalletto-magnet');
-                this.cavalletto = document.querySelector('#cavalletto');
+                this.objMagnet = document.querySelector('#object-magnet');
+                this.cargoObject = document.querySelector('#cargo-object');
                 this.pipCamRig = document.querySelector('#pip-cam-rig');
                 
                 // Piattaforme (Ore 3, Ore 6, Ore 9, Ore 12)
@@ -169,10 +169,10 @@
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
 
-                // Inizializza Hook Cam ulteriormente abbassata a Y = -0.25
+                // Inizializza Hook Cam ad altezza calamita
                 if (this.pipCamRig) {
                     let rad = this.camOrbitalAngle * Math.PI / 180;
-                    this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, -0.25, Math.sin(rad) * 1.5);
+                    this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, -0.27, Math.sin(rad) * 1.5);
                 }
 
                 // Audio
@@ -330,7 +330,7 @@
                     if (this.pipCamRig) {
                         let rad = this.camOrbitalAngle * Math.PI / 180;
                         let dist = 1.5;
-                        this.pipCamRig.object3D.position.set(Math.cos(rad) * dist, -0.25, Math.sin(rad) * dist);
+                        this.pipCamRig.object3D.position.set(Math.cos(rad) * dist, -0.27, Math.sin(rad) * dist);
                     }
                 }
 
@@ -456,20 +456,20 @@
                     if (this.rotorEl) this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
                 }
 
-                // --- SISTEMA MAGNETICO ED COINCIDENZA CENTRI SFERA ---
-                if (this.hookMagnet && this.cavMagnet && this.cavalletto && this.hookArea) {
+                // --- SISTEMA MAGNETICO (CALAMITE CONOVERGENTI IN UN UNICO CENTRO) ---
+                if (this.hookMagnet && this.objMagnet && this.cargoObject && this.hookArea) {
                     
                     this.hookMagnet.object3D.getWorldPosition(this.hookL);
                     this.worldRoot.object3D.worldToLocal(this.hookL);
 
-                    this.cavMagnet.object3D.getWorldPosition(this.cavL);
-                    this.worldRoot.object3D.worldToLocal(this.cavL);
+                    this.objMagnet.object3D.getWorldPosition(this.objL);
+                    this.worldRoot.object3D.worldToLocal(this.objL);
 
                     const tolerances = [0.03, 0.02, 0.015, 0.01, 0.005];
                     let maxAllowedDist = tolerances[this.hookDifficulty - 1];
 
-                    let distHookCav = this.hookL.distanceTo(this.cavL);
-                    let canGrab = distHookCav < maxAllowedDist; 
+                    let distHookObj = this.hookL.distanceTo(this.objL);
+                    let canGrab = distHookObj < maxAllowedDist; 
 
                     let canDrop = false;
                     let targetDropHeight = 0;
@@ -488,41 +488,43 @@
                         }
                     }
 
-                    // FEEDBACK COLORI ENTRAMBE LE SFERE (VERDI DI BASE, ROSSE QUANTO PRONTE)
+                    // FEEDBACK COLORI ENTRAMBE LE CALAMITE
                     if (this.isAttached) {
                         if (canDrop) {
-                            this.hookMagnet.setAttribute('color', '#00FF00'); // Verde Fluo: Rilascio Piattaforma
-                            this.cavMagnet.setAttribute('color', '#00FF00');
+                            this.hookMagnet.setAttribute('color', '#00FF00'); // Verde Fluo: Pronto al Rilascio
+                            this.objMagnet.setAttribute('color', '#00FF00');
                         } else {
-                            this.hookMagnet.setAttribute('color', '#4CAF50'); // Verde Standard in volo
-                            this.cavMagnet.setAttribute('color', '#4CAF50');
+                            this.hookMagnet.setAttribute('color', '#4CAF50'); // Verde Standard
+                            this.objMagnet.setAttribute('color', '#4CAF50');
                         }
                     } else if (canGrab) {
-                        this.hookMagnet.setAttribute('color', '#FF0000'); // ROSSO: PRONTA PER L'AGGANCIO!
-                        this.cavMagnet.setAttribute('color', '#FF0000'); // ROSSO: PRONTA PER L'AGGANCIO!
+                        this.hookMagnet.setAttribute('color', '#FF0000'); // ROSSO: PRONTE AD INGLOBARSI!
+                        this.objMagnet.setAttribute('color', '#FF0000');
                     } else {
                         this.hookMagnet.setAttribute('color', '#4CAF50'); // Verde standard
-                        this.cavMagnet.setAttribute('color', '#4CAF50'); // Verde standard
+                        this.objMagnet.setAttribute('color', '#4CAF50'); 
                     }
 
-                    // AGGANCIO CON COINCIDENZA DEI CENTRI SFERA
+                    // LOGICA DI AGGANCIO ED ALLINEAMENTO CENTRI CALAMITA
                     let triggerPressed = rightTrigger > 0.5;
                     if (triggerPressed && !this.prevRightTrigger) {
                         if (this.isAttached) {
                             if (canDrop) {
                                 this.isAttached = false;
-                                this.worldRoot.object3D.add(this.cavalletto.object3D);
-                                this.cavalletto.object3D.position.copy(this.cavL);
-                                this.cavalletto.object3D.position.y = targetDropHeight + 0.3; 
-                                this.cavalletto.object3D.rotation.set(0, 0, 0);
+                                this.worldRoot.object3D.add(this.cargoObject.object3D);
+                                this.cargoObject.object3D.position.copy(this.objL);
+                                this.cargoObject.object3D.position.y = targetDropHeight + 0.3; 
+                                this.cargoObject.object3D.rotation.set(0, 0, 0);
                             }
                         } else if (canGrab) {
                             this.isAttached = true;  
-                            this.hookArea.object3D.add(this.cavalletto.object3D);
+                            this.hookArea.object3D.add(this.cargoObject.object3D);
                             
-                            // Allineamento perfetto dei centri sferici
-                            this.cavalletto.object3D.position.set(0, -0.60, 0); 
-                            this.cavalletto.object3D.rotation.set(0, 0, 0);
+                            // ALLINEAMENTO PERFETTO: La Calamita del cubo (posto a Y = +0.52 del suo rig)
+                            // si sovrappone al 100% al centro della Calamita del gancio (ora posto a Y = -0.242).
+                            // Offset relativo = (-0.242) - (0.52) = -0.762
+                            this.cargoObject.object3D.position.set(0, -0.762, 0); 
+                            this.cargoObject.object3D.rotation.set(0, 0, 0);
                         }
                     }
                     this.prevRightTrigger = triggerPressed;
@@ -533,7 +535,7 @@
                             if (plat.el) {
                                 plat.el.object3D.getWorldPosition(this.platL);
                                 this.worldRoot.object3D.worldToLocal(this.platL);
-                                let distHoriz = Math.hypot(this.cavL.x - this.platL.x, this.cavL.z - this.platL.z);
+                                let distHoriz = Math.hypot(this.objL.x - this.platL.x, this.objL.z - this.platL.z);
                                 if (distHoriz < plat.radius) {
                                     targetFloorY = plat.height;
                                     break;
@@ -541,12 +543,12 @@
                             }
                         }
 
-                        if (this.cavalletto.object3D.position.y > targetFloorY) {
-                            this.cavalletto.object3D.position.y -= dt * 3.0; 
-                            if (this.cavalletto.object3D.position.y <= targetFloorY) {
-                                this.cavalletto.object3D.position.y = targetFloorY; 
-                                this.cavalletto.object3D.rotation.x = 0; 
-                                this.cavalletto.object3D.rotation.z = 0;
+                        if (this.cargoObject.object3D.position.y > targetFloorY) {
+                            this.cargoObject.object3D.position.y -= dt * 3.0; 
+                            if (this.cargoObject.object3D.position.y <= targetFloorY) {
+                                this.cargoObject.object3D.position.y = targetFloorY; 
+                                this.cargoObject.object3D.rotation.x = 0; 
+                                this.cargoObject.object3D.rotation.z = 0;
                             }
                         }
                     }
@@ -647,14 +649,14 @@
                 <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
             </a-entity>
 
-            <!-- OGGETTO DA SOLLEVARE: CUBO ROSSO CON ANTICOLAZIONE E SFERA VERDE (ORE 9) -->
-            <a-entity id="cavalletto" position="-6.48 0.3 0">
+            <!-- OGGETTO DA TRASPORTARE: CUBO ROSSO CON ANTENNA E CALAMITA VERDE (ORE 9) -->
+            <a-entity id="cargo-object" position="-6.48 0.3 0">
                 <!-- Cubo Rosso -->
                 <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" color="#D32F2F"></a-box>
                 <!-- Antenna sottile -->
                 <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                <!-- Sfera Verde dell'oggetto -->
-                <a-sphere id="cavalletto-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                <!-- Calamita Verde dell'oggetto -->
+                <a-sphere id="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
             </a-entity>
 
             <!-- VERTIBIRD -->
@@ -674,13 +676,13 @@
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
-                            <!-- GANCIO: SOTTILISSIMO CILINDRO CON SFERA VERDE -->
+                            <!-- GANCIO: ASTA CILINDRICA ALLUNGATA DEL 10% (0.242m) CON CALAMITA VERDE -->
                             <a-entity id="hook-area" position="0 0 0">
-                                <a-cylinder position="0 -0.11 0" radius="0.003" height="0.22" color="#222"></a-cylinder>
-                                <!-- Sfera Verde del gancio (diventa Rossa ad aggancio) -->
-                                <a-sphere id="hook-magnet" position="0 -0.22 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                                <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
+                                <!-- Calamita Verde del gancio -->
+                                <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                                 
-                                <!-- Rig della Hook Cam (Abbassata a Y = -0.25) -->
+                                <!-- Rig della Hook Cam -->
                                 <a-entity id="pip-cam-rig">
                                     <a-entity pip-camera="monitor: #hook-monitor"></a-entity>
                                 </a-entity>
@@ -734,7 +736,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v13.0.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v15.0.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
 
                 <!-- HOOK CAM MONITOR (Destra) -->

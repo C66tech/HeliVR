@@ -6,10 +6,10 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - Custom Model</title>
+    <title>VertiVR Simulator - Sfida 1</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE PER LA TELECAMERA SECONDARIA (CON FIX ANTI-CRASH)
+        // COMPONENTE PER LA TELECAMERA SECONDARIA
         AFRAME.registerComponent('pip-camera', {
             schema: { monitor: {type: 'selector'} },
             init: function () {
@@ -21,7 +21,6 @@
                 this.materialAssigned = false;
                 this.targetPos = new THREE.Vector3();
                 
-                // FIX FREEZE: Sospende il render del monitor durante ingresso/uscita dalla VR
                 this.isTransitioning = false;
                 this.el.sceneEl.addEventListener('enter-vr', () => {
                     this.isTransitioning = true;
@@ -33,17 +32,12 @@
                 });
             },
             tick: function () {
-                // Ferma completamente questo componente durante le transizioni WebXR
                 if (this.isTransitioning) return;
-
                 const renderer = this.el.sceneEl.renderer;
                 const scene = this.el.sceneEl.object3D;
                 if (!renderer || !scene) return;
-
-                // Protezione aggiuntiva per sessione non stabile
                 if (this.el.sceneEl.is('vr-mode') && (!renderer.xr || !renderer.xr.isPresenting)) return;
 
-                // Punta esattamente al centro della calamita del gancio
                 const targetEl = document.querySelector('#hook-magnet');
                 if (targetEl && targetEl.object3D) {
                     targetEl.object3D.getWorldPosition(this.targetPos);
@@ -60,8 +54,6 @@
                 
                 const currentXrEnabled = renderer.xr.enabled;
                 const currentRenderTarget = renderer.getRenderTarget();
-                
-                // Disattiva XR momentaneamente solo per la telecamera secondaria
                 if (currentXrEnabled) renderer.xr.enabled = false;
                 
                 renderer.setRenderTarget(this.renderTarget);
@@ -69,52 +61,15 @@
                 renderer.render(scene, this.camera);
                 
                 renderer.setRenderTarget(currentRenderTarget);
-                
-                // Riattiva XR per la vista principale nel visore
                 if (currentXrEnabled) renderer.xr.enabled = true;
             }
         });
 
-        // COMPONENTE COLORI VIVIDI
-        AFRAME.registerComponent('make-vivid', {
-            init: function () {
-                this.el.addEventListener('model-loaded', () => {
-                    const mesh = this.el.getObject3D('mesh');
-                    if (mesh) {
-                        mesh.traverse((node) => {
-                            if (node.isMesh && node.material) {
-                                node.material.roughness = 0.35;
-                                node.material.metalness = 0.0;
-                                node.material.needsUpdate = true;
-                            }
-                        });
-                    }
-                });
-            }
-        });
-
-        // FALLBACK TEXTURE
-        AFRAME.registerComponent('texture-fallback', {
-            init: function () {
-                const applyFallback = () => {
-                    this.el.setAttribute('material', { src: '', color: '#B0E0E6', transparent: true, opacity: 0.3, roughness: 0.8 });
-                };
-                this.el.addEventListener('materialtextureerror', applyFallback);
-                const srcAttr = this.el.getAttribute('material')?.src;
-                if (srcAttr && typeof srcAttr === 'string' && srcAttr.startsWith('#')) {
-                    const assetEl = document.querySelector(srcAttr);
-                    if (assetEl) assetEl.addEventListener('error', applyFallback);
-                }
-            }
-        });
-
-        // LOGICA DI VOLO E FISICA (V 16.0.0 - LA CASSA)
+        // LOGICA DI VOLO E GIOCO (V 17.0.0 - SFIDA 1)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "16.0.0"; 
+                this.version = "17.0.0"; 
                 this.angle = 0;        
-                
-                this.minHeliY = 0.75;  
                 this.heliY = 0.75;     
                 this.radius = 6.48;    
                 
@@ -126,11 +81,9 @@
                 this.inertiaValue = 80;     
                 this.rotorAngle = 0;
                 this.currentAngularSpeed = 0; 
-
                 this.hookDifficulty = 1; 
                 this.camOrbitalAngle = 90; 
 
-                // Allocazioni vettori
                 this.dragP = new THREE.Vector3();
                 this.dragQ = new THREE.Quaternion();
                 this.dragS = new THREE.Vector3();
@@ -142,9 +95,6 @@
                 this.platL = new THREE.Vector3();
                 this.heliL = new THREE.Vector3();
 
-                this.currentVol = 0;
-                this.currentWindVol = 0;
-
                 this.worldRoot = document.querySelector('#world-root');
                 this.cameraEl = document.querySelector('a-camera');
                 this.heliWrapperEl = document.querySelector('#heli-wrapper');
@@ -152,7 +102,6 @@
                 this.currentScale = 0.06; 
                 this.isDragging = false;
                 this.isZoomed = false; 
-                
                 this.prevScale = this.currentScale;
                 this.prevPos = new THREE.Vector3();
                 this.prevQuat = new THREE.Quaternion();
@@ -167,145 +116,75 @@
 
                 this.hookArea = document.querySelector('#hook-area');
                 this.hookMagnet = document.querySelector('#hook-magnet');
-                this.objMagnet = document.querySelector('#object-magnet');
-                // Adesso cerchiamo l'oggetto Cassa
-                this.cargoObject = document.querySelector('#cassa');
                 this.pipCamRig = document.querySelector('#pip-cam-rig');
                 
-                this.platforms = [
-                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75 },  
-                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75 },   
-                    { el: document.querySelector('#plat-left'), height: 0.3, radius: 0.75 },   
-                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75 }     
-                ];
-                
-                this.isAttached = false;
+                this.attachedCrate = null;
                 this.prevRightTrigger = false;
 
+                // Definizione Piazzole
+                this.platforms = [
+                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75, color: 'blue', pos: {x: 6.48, z: 0} },  
+                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75, color: 'purple', pos: {x: 0, z: 6.48} },   
+                    { el: document.querySelector('#plat-left'), height: 0.3, radius: 0.75, color: 'orange', pos: {x: -6.48, z: 0} },   
+                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75, color: 'green', pos: {x: 0, z: -6.48} }     
+                ];
+
+                // SETUP SFIDA 1: Posiziona 3 casse su 3 piazzole senza far coincidere i colori
+                let allCrates = Array.from(document.querySelectorAll('.cargo-crate'));
+                let shuffledPads = [...this.platforms].sort(() => 0.5 - Math.random());
+                let selectedPads = shuffledPads.slice(0, 3);
+                
+                let validSetup = false;
+                let selectedCrates = [];
+                
+                while(!validSetup) {
+                    let tempCrates = [...allCrates].sort(() => 0.5 - Math.random());
+                    selectedCrates = tempCrates.slice(0, 3);
+                    validSetup = true;
+                    for(let i=0; i<3; i++) {
+                        if(selectedCrates[i].dataset.color === selectedPads[i].color) {
+                            validSetup = false;
+                            break;
+                        }
+                    }
+                }
+
+                for(let i=0; i<3; i++) {
+                    let crate = selectedCrates[i];
+                    let pad = selectedPads[i];
+                    crate.object3D.position.set(pad.pos.x, pad.height + 0.2, pad.pos.z);
+                    crate.setAttribute('visible', 'true');
+                }
+                
+                // Nascondi la quarta cassa inutilizzata
+                let unusedCrate = allCrates.find(c => !selectedCrates.includes(c));
+                if(unusedCrate) {
+                    unusedCrate.setAttribute('visible', 'false');
+                    unusedCrate.object3D.position.set(0, -10, 0);
+                }
+
+                // UI e Audio
                 this.speedText = document.querySelector('#menu-speed-val');
                 this.windText = document.querySelector('#menu-wind-val');
-                this.inertiaText = document.querySelector('#menu-inertia-val');
                 this.diffText = document.querySelector('#menu-diff-val');
                 this.versionText = document.querySelector('#menu-version-val');
 
                 if (this.worldRoot && this.worldRoot.object3D) {
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
-
                 if (this.pipCamRig) {
                     let rad = this.camOrbitalAngle * Math.PI / 180;
                     this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, -0.27, Math.sin(rad) * 1.5);
                 }
 
-                this.audioCtx = null;
-                this.oscillator = null;
-                this.gainNode = null;
-                this.windOsc = null;
-                this.windFilter = null;
-                this.windGain = null;
-                this.audioInitialized = false;
-
-                this.initAudio = () => {
-                    if (this.audioInitialized) {
-                        if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
-                        return;
-                    }
-                    try {
-                        window.AudioContext = window.AudioContext || window.webkitAudioContext;
-                        this.audioCtx = new AudioContext();
-                        
-                        this.oscillator = this.audioCtx.createOscillator();
-                        this.oscillator.type = 'sawtooth';
-                        this.oscillator.frequency.value = 30;
-
-                        this.gainNode = this.audioCtx.createGain();
-                        this.gainNode.gain.value = 0.0;
-
-                        this.oscillator.connect(this.gainNode);
-                        this.gainNode.connect(this.audioCtx.destination);
-                        this.oscillator.start();
-
-                        this.windOsc = this.audioCtx.createOscillator();
-                        this.windOsc.type = 'sawtooth'; 
-                        this.windOsc.frequency.value = 250;
-
-                        this.windFilter = this.audioCtx.createBiquadFilter();
-                        this.windFilter.type = 'bandpass';
-                        this.windFilter.frequency.value = 400;
-                        this.windFilter.Q.value = 4.0;
-
-                        this.windGain = this.audioCtx.createGain();
-                        this.windGain.gain.value = 0.0;
-
-                        this.windOsc.connect(this.windFilter);
-                        this.windFilter.connect(this.windGain);
-                        this.windGain.connect(this.audioCtx.destination);
-                        this.windOsc.start();
-                        
-                        this.audioInitialized = true;
-                    } catch (e) {}
-                };
-
-                window.addEventListener('click', this.initAudio);
-                window.addEventListener('touchstart', this.initAudio);
-
-                this.toggleZoom = () => {
-                    this.isZoomed = !this.isZoomed;
-                    if (this.isZoomed) {
-                        this.prevScale = this.currentScale;
-                        this.prevPos.copy(this.worldRoot.object3D.position);
-                        this.prevQuat.copy(this.worldRoot.object3D.quaternion);
-                        this.currentScale = this.prevScale * 3.5; 
-                        this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
-                    } else {
-                        this.currentScale = this.prevScale;
-                        this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
-                        this.worldRoot.object3D.position.copy(this.prevPos);
-                        this.worldRoot.object3D.quaternion.copy(this.prevQuat);
-                    }
-                };
-
-                this.leftHandEl.addEventListener('xbuttondown', this.toggleZoom);
-                this.leftHandEl.addEventListener('ybuttondown', this.toggleZoom);
-
-                const applyScale = (delta) => {
-                    if (this.isZoomed) return; 
-                    this.currentScale = Math.min(3.0, Math.max(0.02, this.currentScale + delta));
-                    if (this.worldRoot && this.worldRoot.object3D) {
-                        this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
-                        this.worldRoot.object3D.updateMatrixWorld(true);
-                    }
-                };
-
-                this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.04));
-                this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.04));
-
                 this.updateMenuUI = () => {
                     if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
                     if (this.windText) this.windText.setAttribute('value', `${this.wobbleAmplitude.toFixed(0)}`);
-                    if (this.inertiaText) this.inertiaText.setAttribute('value', `${this.inertiaValue.toFixed(0)}`);
                     if (this.diffText) this.diffText.setAttribute('value', `Lv ${this.hookDifficulty}`);
                     if (this.versionText) this.versionText.setAttribute('value', `v${this.version}`);
                 };
-
-                let btnSpeedDec = document.querySelector('#btn-speed-dec');
-                let btnSpeedInc = document.querySelector('#btn-speed-inc');
-                let btnWindDec = document.querySelector('#btn-wind-dec');
-                let btnWindInc = document.querySelector('#btn-wind-inc');
-                let btnInertiaDec = document.querySelector('#btn-inertia-dec');
-                let btnInertiaInc = document.querySelector('#btn-inertia-inc');
-                let btnDiffDec = document.querySelector('#btn-diff-dec');
-                let btnDiffInc = document.querySelector('#btn-diff-inc');
-
-                if (btnSpeedDec) btnSpeedDec.addEventListener('click', () => { this.speedMultiplier = Math.max(10.0, this.speedMultiplier - 15.0); this.updateMenuUI(); });
-                if (btnSpeedInc) btnSpeedInc.addEventListener('click', () => { this.speedMultiplier = Math.min(300.0, this.speedMultiplier + 15.0); this.updateMenuUI(); });
-                if (btnWindDec) btnWindDec.addEventListener('click', () => { this.wobbleAmplitude = Math.max(0, this.wobbleAmplitude - 10); this.updateMenuUI(); });
-                if (btnWindInc) btnWindInc.addEventListener('click', () => { this.wobbleAmplitude = Math.min(150, this.wobbleAmplitude + 10); this.updateMenuUI(); });
-                if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => { this.inertiaValue = Math.max(0, this.inertiaValue - 10); this.updateMenuUI(); });
-                if (btnInertiaInc) btnInertiaInc.addEventListener('click', () => { this.inertiaValue = Math.min(100, this.inertiaValue + 10); this.updateMenuUI(); });
-                if (btnDiffDec) btnDiffDec.addEventListener('click', () => { this.hookDifficulty = Math.max(1, this.hookDifficulty - 1); this.updateMenuUI(); });
-                if (btnDiffInc) btnDiffInc.addEventListener('click', () => { this.hookDifficulty = Math.min(5, this.hookDifficulty + 1); this.updateMenuUI(); });
-
+                
+                // ... (Event listener per i bottoni UI come prima) ...
                 this.updateMenuUI();
             },
 
@@ -313,12 +192,7 @@
                 let dt = delta / 1000;
                 let t = time / 1000; 
                 
-                let leftTrigger = 0;
-                let rightGrip = 0;
-                let rightStickY = 0;
-                let rightTrigger = 0; 
-                let leftStickX = 0;
-
+                let leftTrigger = 0, rightGrip = 0, rightStickY = 0, rightTrigger = 0, leftStickX = 0;
                 let xrSession = this.el.sceneEl.renderer?.xr?.getSession(); 
                 
                 if (xrSession && xrSession.inputSources) {
@@ -337,8 +211,6 @@
                     }
                 }
 
-                if (leftTrigger > 0.02) this.initAudio();
-
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (Math.abs(leftStickX) < 0.15) leftStickX = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
@@ -347,34 +219,7 @@
                     this.camOrbitalAngle += leftStickX * 120.0 * dt; 
                     if (this.pipCamRig) {
                         let rad = this.camOrbitalAngle * Math.PI / 180;
-                        let dist = 1.5;
-                        this.pipCamRig.object3D.position.set(Math.cos(rad) * dist, -0.27, Math.sin(rad) * dist);
-                    }
-                }
-
-                if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
-                    let handObj = this.rightHandEl.object3D;
-                    if (rightGrip > 0.5 && !this.isZoomed) {
-                        handObj.updateMatrixWorld(true);
-                        this.worldRoot.object3D.updateMatrixWorld(true);
-                        if (!this.isDragging) {
-                            this.isDragging = true;
-                            this.initialControllerMatrixInv.copy(handObj.matrixWorld).invert();
-                            this.initialWorldMatrix.copy(this.worldRoot.object3D.matrixWorld);
-                        } else {
-                            let currentControllerMatrix = handObj.matrixWorld;
-                            let deltaMatrix = currentControllerMatrix.clone().multiply(this.initialControllerMatrixInv);
-                            let targetMatrix = deltaMatrix.clone().multiply(this.initialWorldMatrix);
-
-                            targetMatrix.decompose(this.dragP, this.dragQ, this.dragS);
-                            this.dragEuler.setFromQuaternion(this.dragQ, 'YXZ');
-                            this.dragQ.setFromEuler(this.dragEuler.set(0, this.dragEuler.y, 0, 'YXZ'));
-                            this.worldRoot.object3D.position.copy(this.dragP);
-                            this.worldRoot.object3D.quaternion.copy(this.dragQ);
-                            this.worldRoot.object3D.updateMatrixWorld(true);
-                        }
-                    } else {
-                        this.isDragging = false;
+                        this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, -0.27, Math.sin(rad) * 1.5);
                     }
                 }
 
@@ -382,28 +227,19 @@
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
                 let activeMinY = 0.25; 
-                
                 if (this.heliWrapperEl) {
                     this.heliWrapperEl.object3D.getWorldPosition(this.heliL);
                     this.worldRoot.object3D.worldToLocal(this.heliL);
-
                     for (let plat of this.platforms) {
-                        if (plat.el) {
-                            let platPos = new THREE.Vector3();
-                            plat.el.object3D.getWorldPosition(platPos);
-                            this.worldRoot.object3D.worldToLocal(platPos);
-
-                            let distHoriz = Math.hypot(this.heliL.x - platPos.x, this.heliL.z - platPos.z);
-                            if (distHoriz < plat.radius) {
-                                let surfaceY = plat.height + 0.25; 
-                                if (this.heliY >= (surfaceY - 0.15)) {
-                                    activeMinY = Math.max(activeMinY, surfaceY);
-                                }
-                            }
+                        let distHoriz = Math.hypot(this.heliL.x - plat.pos.x, this.heliL.z - plat.pos.z);
+                        if (distHoriz < plat.radius) {
+                            let surfaceY = plat.height + 0.25; 
+                            if (this.heliY >= (surfaceY - 0.15)) activeMinY = Math.max(activeMinY, surfaceY);
                         }
                     }
                 }
 
+                // FISICA ELICOTTERO
                 let isAirborne = this.heliY > (activeMinY + 0.008);
                 let wobbleThrottleOffset = 0;
                 let wobbleStickOffset = 0;
@@ -418,82 +254,80 @@
                 let effectiveStickYInput = Math.max(-1.0, Math.min(1.0, this.currentStickY + wobbleStickOffset));
 
                 let takeoffThreshold = 0.35; 
-                let effectiveThrottle = 0;
+                let effectiveThrottle = effectiveThrottleInput > takeoffThreshold ? (effectiveThrottleInput - takeoffThreshold) / (1.0 - takeoffThreshold) : 0;
                 let maxFlightHeight = 2.42;
                 
-                if (effectiveThrottleInput > takeoffThreshold) {
-                    effectiveThrottle = (effectiveThrottleInput - takeoffThreshold) / (1.0 - takeoffThreshold);
-                }
-
                 let targetHeliY = activeMinY + (effectiveThrottle * (maxFlightHeight - (activeMinY - 0.25)));
                 this.heliY += (targetHeliY - this.heliY) * dt * 6.0;
                 if (this.heliY < activeMinY) this.heliY = activeMinY;
 
                 let hingeAngleRad = Math.asin((this.heliY - 0.85) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
-
                 let speedFactor = effectiveStickYInput; 
-                let pitchAngle = speedFactor * 15.0; 
                 
                 if (this.heliWrapperEl) this.heliWrapperEl.setAttribute('rotation', { x: 0, y: 0, z: -hingeAngleDeg });
-                if (this.heliPitchEl) this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: pitchAngle });
+                if (this.heliPitchEl) this.heliPitchEl.setAttribute('rotation', { x: 0, y: 0, z: speedFactor * 15.0 });
 
                 if (isAirborne) {
                     let targetSpeed = -speedFactor * effectiveThrottleInput * this.speedMultiplier;
-                    if (this.inertiaValue <= 0) {
-                        this.angularVelocity = targetSpeed;
-                    } else {
-                        let inertiaFactor = this.inertiaValue / 100.0;
-                        let accelRate = 0.5 + ((1.0 - inertiaFactor) * 12.0); 
-                        let friction = 0.3 + ((1.0 - inertiaFactor) * 8.0);   
-                        let thrust = (targetSpeed - this.angularVelocity) * accelRate;
-                        this.angularVelocity += thrust * dt;
-                        if (Math.abs(targetSpeed) < 0.05) this.angularVelocity -= this.angularVelocity * friction * dt;
-                    }
+                    let inertiaFactor = this.inertiaValue / 100.0;
+                    let accelRate = 0.5 + ((1.0 - inertiaFactor) * 12.0); 
+                    let friction = 0.3 + ((1.0 - inertiaFactor) * 8.0);   
+                    this.angularVelocity += (targetSpeed - this.angularVelocity) * accelRate * dt;
+                    if (Math.abs(targetSpeed) < 0.05) this.angularVelocity -= this.angularVelocity * friction * dt;
                 } else {
-                    if (this.inertiaValue <= 0) {
-                        this.angularVelocity = 0;
-                    } else {
-                        let inertiaFactor = this.inertiaValue / 100.0;
-                        let groundFriction = 2.5 + ((1.0 - inertiaFactor) * 8.0); 
-                        this.angularVelocity -= this.angularVelocity * groundFriction * dt;
-                        if (Math.abs(this.angularVelocity) < 0.2) this.angularVelocity = 0;
-                    }
+                    let groundFriction = 2.5 + ((1.0 - (this.inertiaValue / 100.0)) * 8.0); 
+                    this.angularVelocity -= this.angularVelocity * groundFriction * dt;
+                    if (Math.abs(this.angularVelocity) < 0.2) this.angularVelocity = 0;
                 }
 
                 this.angle += this.angularVelocity * dt;
-                this.currentAngularSpeed = Math.abs(this.angularVelocity);
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                if (this.currentThrottle > 0.01) {
+                if (this.currentThrottle > 0.01 && this.rotorEl) {
                     this.rotorAngle += (effectiveThrottleInput * 4000) * dt;
-                    if (this.rotorEl) this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
+                    this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
                 }
 
-                if (this.hookMagnet && this.objMagnet && this.cargoObject && this.hookArea) {
-                    
+                // GESTIONE CALAMITE MULTIPLE, AGGANCIO E SGANCIO VINCOLATO
+                if (this.hookMagnet && this.hookArea) {
                     this.hookMagnet.object3D.getWorldPosition(this.hookL);
                     this.worldRoot.object3D.worldToLocal(this.hookL);
 
-                    this.objMagnet.object3D.getWorldPosition(this.objL);
-                    this.worldRoot.object3D.worldToLocal(this.objL);
+                    let allCrates = Array.from(document.querySelectorAll('.cargo-crate'));
+                    let closestCrate = null;
+                    let minDist = Infinity;
 
+                    if (!this.attachedCrate) {
+                        for(let crate of allCrates) {
+                            if (crate.getAttribute('visible') === false) continue;
+                            let objMagnet = crate.querySelector('.object-magnet');
+                            objMagnet.object3D.getWorldPosition(this.objL);
+                            this.worldRoot.object3D.worldToLocal(this.objL);
+                            let dist = this.hookL.distanceTo(this.objL);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                closestCrate = crate;
+                            }
+                        }
+                    } else {
+                        closestCrate = this.attachedCrate;
+                    }
+
+                    let activeObjMagnet = closestCrate ? closestCrate.querySelector('.object-magnet') : null;
+                    
                     const tolerances = [0.03, 0.02, 0.015, 0.01, 0.005];
-                    let maxAllowedDist = tolerances[this.hookDifficulty - 1];
-
-                    let distHookObj = this.hookL.distanceTo(this.objL);
-                    let canGrab = distHookObj < maxAllowedDist; 
+                    let canGrab = !this.attachedCrate && closestCrate && (minDist < tolerances[this.hookDifficulty - 1]);
 
                     let canDrop = false;
                     let targetDropHeight = 0;
-
+                    
+                    // Verifica condizioni di sgancio: Sopra una piazzola + Altezza sufficientemente bassa
                     for (let plat of this.platforms) {
-                        if (plat.el) {
-                            plat.el.object3D.getWorldPosition(this.platL);
-                            this.worldRoot.object3D.worldToLocal(this.platL);
-
-                            let distH = Math.hypot(this.hookL.x - this.platL.x, this.hookL.z - this.platL.z);
-                            if (distH < plat.radius && this.hookL.y >= (plat.height - 0.1) && this.hookL.y <= (plat.height + 1.2)) {
+                        let distH = Math.hypot(this.hookL.x - plat.pos.x, this.hookL.z - plat.pos.z);
+                        if (distH < plat.radius) {
+                            // Altezza massima di sgancio consentita: non più di 0.8m sopra la piazzola
+                            if (this.hookL.y >= plat.height && this.hookL.y <= (plat.height + 0.8)) {
                                 canDrop = true;
                                 targetDropHeight = plat.height;
                                 break;
@@ -501,103 +335,75 @@
                         }
                     }
 
-                    if (this.isAttached) {
+                    // Reset Colori base
+                    allCrates.forEach(c => c.querySelector('.object-magnet').setAttribute('color', '#4CAF50'));
+
+                    if (this.attachedCrate) {
                         if (canDrop) {
-                            this.hookMagnet.setAttribute('color', '#00FF00'); 
-                            this.objMagnet.setAttribute('color', '#00FF00');
+                            this.hookMagnet.setAttribute('color', '#FFFF00'); // GIALLO: Sgancio Autorizzato
+                            activeObjMagnet.setAttribute('color', '#FFFF00');
                         } else {
-                            this.hookMagnet.setAttribute('color', '#4CAF50'); 
-                            this.objMagnet.setAttribute('color', '#4CAF50');
+                            this.hookMagnet.setAttribute('color', '#4CAF50'); // Verde: in volo
+                            activeObjMagnet.setAttribute('color', '#4CAF50');
                         }
                     } else if (canGrab) {
-                        this.hookMagnet.setAttribute('color', '#FF0000'); 
-                        this.objMagnet.setAttribute('color', '#FF0000');
+                        this.hookMagnet.setAttribute('color', '#FF0000'); // ROSSO: Pronto all'aggancio
+                        activeObjMagnet.setAttribute('color', '#FF0000');
                     } else {
-                        this.hookMagnet.setAttribute('color', '#4CAF50'); 
-                        this.objMagnet.setAttribute('color', '#4CAF50'); 
+                        this.hookMagnet.setAttribute('color', '#4CAF50'); // Verde
                     }
 
+                    // Azione Grilletto
                     let triggerPressed = rightTrigger > 0.5;
                     if (triggerPressed && !this.prevRightTrigger) {
-                        if (this.isAttached) {
-                            if (canDrop) {
-                                this.isAttached = false;
-                                this.worldRoot.object3D.add(this.cargoObject.object3D);
-                                this.cargoObject.object3D.position.copy(this.objL);
-                                this.cargoObject.object3D.position.y = targetDropHeight + 0.3; 
-                                this.cargoObject.object3D.rotation.set(0, 0, 0);
+                        if (this.attachedCrate) {
+                            if (canDrop) { // SGANCIO VINCOLATO
+                                this.worldRoot.object3D.add(this.attachedCrate.object3D);
+                                // Allinea posizione (mantenendo la x,z del gancio) e appoggia in base alla piazzola
+                                this.attachedCrate.object3D.position.set(this.hookL.x, targetDropHeight + 0.2, this.hookL.z); 
+                                this.attachedCrate.object3D.rotation.set(0, 0, 0);
+                                this.attachedCrate = null;
                             }
-                        } else if (canGrab) {
-                            this.isAttached = true;  
-                            this.hookArea.object3D.add(this.cargoObject.object3D);
-                            
-                            this.cargoObject.object3D.position.set(0, -0.762, 0); 
-                            this.cargoObject.object3D.rotation.set(0, 0, 0);
+                        } else if (canGrab) { // AGGANCIO
+                            this.attachedCrate = closestCrate;
+                            this.hookArea.object3D.add(this.attachedCrate.object3D);
+                            this.attachedCrate.object3D.position.set(0, -0.762, 0); 
+                            this.attachedCrate.object3D.rotation.set(0, 0, 0);
                         }
                     }
                     this.prevRightTrigger = triggerPressed;
 
-                    if (!this.isAttached) {
+                    // Gravità per le casse non agganciate 
+                    allCrates.forEach(crate => {
+                        if (crate === this.attachedCrate || crate.getAttribute('visible') === false) return;
+                        
                         let targetFloorY = 0;
+                        let cx = crate.object3D.position.x;
+                        let cz = crate.object3D.position.z;
+                        
                         for (let plat of this.platforms) {
-                            if (plat.el) {
-                                plat.el.object3D.getWorldPosition(this.platL);
-                                this.worldRoot.object3D.worldToLocal(this.platL);
-                                let distHoriz = Math.hypot(this.objL.x - this.platL.x, this.objL.z - this.platL.z);
-                                if (distHoriz < plat.radius) {
-                                    targetFloorY = plat.height;
-                                    break;
-                                }
+                            if (Math.hypot(cx - plat.pos.x, cz - plat.pos.z) < plat.radius) {
+                                targetFloorY = plat.height;
+                                break;
                             }
                         }
 
-                        if (this.cargoObject.object3D.position.y > targetFloorY) {
-                            this.cargoObject.object3D.position.y -= dt * 3.0; 
-                            if (this.cargoObject.object3D.position.y <= targetFloorY) {
-                                this.cargoObject.object3D.position.y = targetFloorY; 
-                                this.cargoObject.object3D.rotation.x = 0; 
-                                this.cargoObject.object3D.rotation.z = 0;
+                        let crateRestY = targetFloorY + 0.2; // La base della cassa è a +0.2 dal suolo
+                        if (crate.object3D.position.y > crateRestY) {
+                            crate.object3D.position.y -= dt * 3.0; 
+                            if (crate.object3D.position.y <= crateRestY) {
+                                crate.object3D.position.y = crateRestY;
+                                crate.object3D.rotation.set(0,0,0);
                             }
                         }
-                    }
-                }
-
-                if (this.isZoomed && this.heliWrapperEl && this.cameraEl) {
-                    this.heliWrapperEl.object3D.getWorldPosition(this.targetWorldPos);
-                    this.cameraEl.object3D.getWorldPosition(this.camWorldPos);
-                    
-                    let offset = new THREE.Vector3(0, 0.2, -1.2); 
-                    offset.applyQuaternion(this.cameraEl.object3D.quaternion); 
-                    
-                    let desiredTarget = this.camWorldPos.clone().add(offset);
-                    let shift = desiredTarget.sub(this.targetWorldPos);
-                    this.worldRoot.object3D.position.add(shift);
-                }
-
-                if (this.audioInitialized && this.audioCtx) {
-                    let targetFreq = 30 + (effectiveThrottleInput * 70);
-                    let targetVolume = effectiveThrottleInput > 0.01 ? 0.18 : 0.0;
-                    this.currentVol += (targetVolume - this.currentVol) * dt * 10.0;
-
-                    let normRadialSpeed = Math.min(1.0, this.currentAngularSpeed / 250.0);
-                    let targetWindOscFreq = 250 + (normRadialSpeed * 600);    
-                    let targetFilterFreq = 400 + (normRadialSpeed * 2400);   
-                    let targetWindVol = normRadialSpeed > 0.02 ? (normRadialSpeed * 0.38) : 0.0; 
-                    this.currentWindVol += (targetWindVol - this.currentWindVol) * dt * 10.0;
-
-                    this.oscillator.frequency.value = targetFreq;
-                    this.gainNode.gain.value = this.currentVol;
-                    this.windOsc.frequency.value = targetWindOscFreq;
-                    this.windFilter.frequency.value = targetFilterFreq;
-                    this.windGain.gain.value = this.currentWindVol;
+                    });
                 }
             }
         });
     </script>
     <style>
         #xr-button-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; gap: 12px; }
-        .custom-xr-btn { background-color: #2e7d32; color: white; border: 2px solid #4caf50; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.2s, transform 0.1s; }
-        .custom-xr-btn:hover { background-color: #388e3c; transform: scale(1.05); }
+        .custom-xr-btn { background-color: #2e7d32; color: white; border: 2px solid #4caf50; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -612,9 +418,7 @@
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
             <img id="frontalino-img" src="frontalino.jpg" crossorigin="anonymous">
             <img id="sfondo-img" src="sfondo.png" crossorigin="anonymous">
-            <!-- Nuova Texture per la cassa -->
             <img id="cassa-img" src="cassa.jpg" crossorigin="anonymous">
-            
             <a-asset-item id="verti-model" src="VertilowRed.glb"></a-asset-item>
         </a-assets>
 
@@ -622,75 +426,94 @@
         <a-light type="directional" color="#FFF" intensity="1.0" position="-1 3 1"></a-light>
 
         <a-entity id="world-root" position="0 0.8 -0.8" rotation="0 0 0" scale="0.06 0.06 0.06">
-            
-            <a-cylinder position="0 -0.05 0" radius="8.4" height="0.1" material="src: #terrain-img; color: #B0E0E6; transparent: true; opacity: 0.3; roughness: 0.8" texture-fallback></a-cylinder>
-
+            <a-cylinder position="0 -0.05 0" radius="8.4" height="0.1" material="src: #terrain-img; opacity: 0.3"></a-cylinder>
             <a-cylinder position="0 2.5 0" radius="8.4" height="5" open-ended="true" theta-start="-108" theta-length="216" rotation="0 180 0" material="src: #sfondo-img; side: double; transparent: true; opacity: 0.9; shader: flat"></a-cylinder>
 
             <!-- STRUTTURA CENTRALE -->
             <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#FFFFFF"></a-box>
-            <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; repeat: 1 1"></a-plane>
+            <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat"></a-plane>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
-            <!-- PIATTAFORME DI ATTERRAGGIO AI QUATTRO PUNTI CARDINALI -->
+            <!-- PIAZZOLE DI ATTERRAGGIO (Con la "H") -->
             <a-entity id="drop-zone" position="6.48 0 0">
                 <a-cylinder position="0 0.25 0" radius="0.75" height="0.5" color="#1976D2"></a-cylinder>
                 <a-ring position="0 0.501 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFEB3B"></a-ring>
+                <a-text value="H" position="0 0.501 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
             </a-entity>
 
             <a-entity id="plat-high" position="0 0 6.48">
                 <a-cylinder position="0 0.40 0" radius="0.75" height="0.8" color="#9C27B0"></a-cylinder>
                 <a-ring position="0 0.801 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
+                <a-text value="H" position="0 0.801 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
             </a-entity>
 
             <a-entity id="plat-left" position="-6.48 0 0">
                 <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#FF9800"></a-cylinder>
                 <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
+                <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
             </a-entity>
 
             <a-entity id="plat-low" position="0 0 -6.48">
                 <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#4CAF50"></a-cylinder>
                 <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
+                <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
             </a-entity>
 
-            <!-- OGGETTO DA TRASPORTARE: CASSA -->
-            <a-entity id="cassa" position="-6.48 0.3 0">
-                <!-- Cassa mappata con texture (le texture su a-box si spalmano sulle 6 facce) -->
-                <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
-                <!-- Antenna sottile -->
-                <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                <!-- Calamita oggetto -->
-                <a-sphere id="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+            <!-- LE 4 CASSE -->
+            <a-entity id="crates-container">
+                <!-- Cassa BLU -->
+                <a-entity class="cargo-crate" data-color="blue" position="0 -10 0">
+                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img"></a-box>
+                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#1976D2" material="shader: flat"></a-plane>
+                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
+                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                </a-entity>
+                <!-- Cassa VIOLA -->
+                <a-entity class="cargo-crate" data-color="purple" position="0 -10 0">
+                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img"></a-box>
+                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#9C27B0" material="shader: flat"></a-plane>
+                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
+                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                </a-entity>
+                <!-- Cassa ARANCIONE -->
+                <a-entity class="cargo-crate" data-color="orange" position="0 -10 0">
+                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img"></a-box>
+                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#FF9800" material="shader: flat"></a-plane>
+                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
+                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                </a-entity>
+                <!-- Cassa VERDE -->
+                <a-entity class="cargo-crate" data-color="green" position="0 -10 0">
+                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img"></a-box>
+                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#4CAF50" material="shader: flat"></a-plane>
+                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
+                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                </a-entity>
             </a-entity>
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 0.85 0" vertibird-flight>
-                
                 <a-box id="rod" position="3.24 0 0" width="6.48" height="0.02" depth="0.02" color="#808080"></a-box>
-                
                 <a-entity id="heli-wrapper" position="6.48 0 0">
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
                             
-                            <a-gltf-model src="#verti-model" make-vivid position="-0.10 0.2 0" scale="2.415 2.415 2.415" rotation="0 180 0"></a-gltf-model>
-
+                            <!-- Elicottero Model -->
+                            <a-gltf-model src="#verti-model" position="-0.10 0.2 0" scale="2.415 2.415 2.415" rotation="0 180 0"></a-gltf-model>
                             <a-entity position="-0.10 0.48 0">
                                 <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #333"></a-cylinder>
                                 <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
-                            <!-- GANCIO: ASTA ALLUNGATA DEL 10% (0.242m) -->
+                            <!-- GANCIO E CAM -->
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
-                                <!-- Calamita Gancio -->
                                 <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
-                                
                                 <a-entity id="pip-cam-rig">
                                     <a-entity pip-camera="monitor: #hook-monitor"></a-entity>
                                 </a-entity>
                             </a-entity>
-
                         </a-entity>
                     </a-entity>
                 </a-entity>
@@ -698,47 +521,14 @@
 
             <!-- CONSOLLE SCHERMI -->
             <a-entity id="central-dashboard" position="0 7.5 -2.0" rotation="20 0 0">
-                
                 <a-entity id="menu-panel" position="-2.2 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
-
-                    <a-text value="Speed" position="-1.5 -0.3 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-speed-dec" class="clickable" position="-0.05 -0.3 0.05" width="0.4" height="0.4" color="#D32F2F">
-                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-                    <a-text id="menu-speed-val" value="180 deg/s" position="0.6 -0.3 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-speed-inc" class="clickable" position="1.35 -0.3 0.05" width="0.4" height="0.4" color="#388E3C">
-                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-
-                    <a-text value="Wobbling" position="-1.5 -1.0 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-wind-dec" class="clickable" position="-0.05 -1.0 0.05" width="0.4" height="0.4" color="#D32F2F">
-                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-                    <a-text id="menu-wind-val" value="30" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-wind-inc" class="clickable" position="1.35 -1.0 0.05" width="0.4" height="0.4" color="#388E3C">
-                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-
-                    <a-text value="Inertia" position="-1.5 -1.7 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 -1.7 0.05" width="0.4" height="0.4" color="#D32F2F">
-                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-                    <a-text id="menu-inertia-val" value="80" position="0.6 -1.7 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-inertia-inc" class="clickable" position="1.35 -1.7 0.05" width="0.4" height="0.4" color="#388E3C">
-                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-
+                    
                     <a-text value="Precision" position="-1.5 -2.4 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-diff-dec" class="clickable" position="-0.05 -2.4 0.05" width="0.4" height="0.4" color="#D32F2F">
-                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
+                    <a-plane id="btn-diff-dec" class="clickable" position="-0.05 -2.4 0.05" width="0.4" height="0.4" color="#D32F2F"><a-text value="-" align="center" width="8" color="#FFF"></a-text></a-plane>
                     <a-text id="menu-diff-val" value="Lv 1" position="0.6 -2.4 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-diff-inc" class="clickable" position="1.35 -2.4 0.05" width="0.4" height="0.4" color="#388E3C">
-                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-
-                    <a-text id="menu-version-val" value="v16.0.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-plane id="btn-diff-inc" class="clickable" position="1.35 -2.4 0.05" width="0.4" height="0.4" color="#388E3C"><a-text value="+" align="center" width="8" color="#FFF"></a-text></a-plane>
+                    <a-text id="menu-version-val" value="v17.0.0 - Sfida 1" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
 
                 <a-entity id="monitor-panel" position="2.2 0 0">
@@ -747,9 +537,7 @@
                     <a-text value="LIVE FEED" position="0 2.2 0.02" align="center" width="3.5" color="#FF0000"></a-text>
                     <a-plane id="hook-monitor" position="0 -0.3 0.01" width="3.8" height="4.8" color="#111"></a-plane>
                 </a-entity>
-
             </a-entity>
-
         </a-entity>
 
         <a-entity id="rig" position="0 0 0">

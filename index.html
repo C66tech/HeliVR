@@ -75,10 +75,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 7.1.0 - PRECISIONE DI AGGANCIO REGOLABILE)
+        // LOGICA DI VOLO E FISICA (V 8.0.0 - PIATTAFORMA DI RILASCIO E VISTA LATERALE)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "7.1.0"; 
+                this.version = "8.0.0"; 
                 this.angle = 0;        
                 this.heliY = 0.25;     
                 this.minHeliY = 0.25;  
@@ -93,7 +93,6 @@
                 this.rotorAngle = 0;
                 this.currentAngularSpeed = 0; 
 
-                // Livello di precisione di base (1-5)
                 this.hookDifficulty = 1; 
 
                 // Variabili allocazione Tick
@@ -105,6 +104,7 @@
                 this.camWorldPos = new THREE.Vector3();
                 this.hookL = new THREE.Vector3();
                 this.cavL = new THREE.Vector3();
+                this.dropL = new THREE.Vector3();
 
                 this.currentVol = 0;
                 this.currentWindVol = 0;
@@ -112,7 +112,7 @@
                 // Gestione World Root e Zoom
                 this.worldRoot = document.querySelector('#world-root');
                 this.cameraEl = document.querySelector('a-camera');
-                this.hookArea = document.querySelector('#hook-area'); 
+                this.heliWrapperEl = document.querySelector('#heli-wrapper');
                 
                 this.currentScale = 0.06; 
                 this.isDragging = false;
@@ -125,16 +125,17 @@
                 this.initialControllerMatrixInv = new THREE.Matrix4();
                 this.initialWorldMatrix = new THREE.Matrix4();
                 
-                this.heliWrapperEl = document.querySelector('#heli-wrapper');
                 this.heliPitchEl = document.querySelector('#heli-pitch');
                 this.rotorEl = document.querySelector('#main-rotor');
                 this.rightHandEl = document.querySelector('#right-hand');
                 this.leftHandEl = document.querySelector('#left-hand');
 
-                // Elementi Magnetici
+                // Elementi Magnetici e Piattaforma
                 this.hookMagnet = document.querySelector('#hook-magnet');
                 this.cavMagnet = document.querySelector('#cavalletto-magnet');
                 this.cavalletto = document.querySelector('#cavalletto');
+                this.dropZone = document.querySelector('#drop-zone');
+                
                 this.isAttached = false;
                 this.prevRightTrigger = false;
 
@@ -209,7 +210,7 @@
                         this.prevScale = this.currentScale;
                         this.prevPos.copy(this.worldRoot.object3D.position);
                         this.prevQuat.copy(this.worldRoot.object3D.quaternion);
-                        this.currentScale = this.prevScale * 4.0; 
+                        this.currentScale = this.prevScale * 3.5; 
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                     } else {
                         this.currentScale = this.prevScale;
@@ -395,8 +396,8 @@
                     if (this.rotorEl) this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
                 }
 
-                // --- SISTEMA MAGNETICO CON SOGLIE CONFIGURABILI ---
-                if (this.hookMagnet && this.cavMagnet && this.cavalletto) {
+                // --- SISTEMA MAGNETICO ED ESCLUSIVITÀ DI RILASCIO SULLA PIATTAFORMA ---
+                if (this.hookMagnet && this.cavMagnet && this.cavalletto && this.dropZone) {
                     
                     this.hookMagnet.object3D.getWorldPosition(this.hookL);
                     this.worldRoot.object3D.worldToLocal(this.hookL);
@@ -404,50 +405,69 @@
                     this.cavMagnet.object3D.getWorldPosition(this.cavL);
                     this.worldRoot.object3D.worldToLocal(this.cavL);
 
-                    // Array delle tolleranze in metri (spazio locale)
-                    // Livello 1 = 0.03m (3cm), Livello 5 = 0.005m (0.5cm)
+                    this.dropZone.object3D.getWorldPosition(this.dropL);
+                    this.worldRoot.object3D.worldToLocal(this.dropL);
+
+                    // Calcolo tolleranza in base al livello
                     const tolerances = [0.03, 0.02, 0.015, 0.01, 0.005];
                     let maxAllowedDist = tolerances[this.hookDifficulty - 1];
 
-                    let dist = this.hookL.distanceTo(this.cavL);
-                    let canGrab = dist < maxAllowedDist; 
+                    let distHookCav = this.hookL.distanceTo(this.cavL);
+                    let canGrab = distHookCav < maxAllowedDist; 
 
-                    // Gestione Colori
+                    // Verifica se il gancio si trova sopra la Piattaforma di Rilascio (Cilindro raggio 0.75m)
+                    let distHorizDrop = Math.hypot(this.hookL.x - this.dropL.x, this.hookL.z - this.dropL.z);
+                    let canDrop = (distHorizDrop < 0.75) && (this.hookL.y >= 0.3) && (this.hookL.y <= 1.2);
+
+                    // Gestione Colori Feedback
                     if (this.isAttached) {
-                        this.hookMagnet.setAttribute('color', '#FFFF00'); // Giallo (Agganciato)
-                        this.cavMagnet.setAttribute('color', '#FFFF00');
+                        if (canDrop) {
+                            this.hookMagnet.setAttribute('color', '#00FF00'); // Verde Fluo: Pronto al Rilascio!
+                            this.cavMagnet.setAttribute('color', '#00FF00');
+                        } else {
+                            this.hookMagnet.setAttribute('color', '#FFFF00'); // Giallo: Agganciato in volo
+                            this.cavMagnet.setAttribute('color', '#FFFF00');
+                        }
                     } else if (canGrab) {
-                        this.hookMagnet.setAttribute('color', '#00FFFF'); // Azzurro (Pronto all'aggancio!)
+                        this.hookMagnet.setAttribute('color', '#00FFFF'); // Azzurro: Pronto all'Aggancio!
                         this.cavMagnet.setAttribute('color', '#00FFFF');
                     } else {
-                        this.hookMagnet.setAttribute('color', '#FF00FF'); // Fucsia/Verde (Troppo lontano)
+                        this.hookMagnet.setAttribute('color', '#FF00FF'); // Fucsia/Verde (Distante)
                         this.cavMagnet.setAttribute('color', '#00FF00');
                     }
 
-                    // Input Aggancio/Sgancio (Grilletto destro)
+                    // Input Aggancio / Sgancio
                     let triggerPressed = rightTrigger > 0.5;
                     if (triggerPressed && !this.prevRightTrigger) {
                         if (this.isAttached) {
-                            this.isAttached = false; // Sgancia
+                            // Sgancio consentito SOLO sopra la piattaforma
+                            if (canDrop) {
+                                this.isAttached = false;
+                            }
                         } else if (canGrab) {
-                            this.isAttached = true;  // Aggancia
+                            this.isAttached = true;  
                         }
                     }
                     this.prevRightTrigger = triggerPressed;
 
-                    // Posizionamento del Cavalletto
+                    // Posizionamento Cavalletto
                     if (this.isAttached) {
-                        // Segue il gancio
                         let targetPos = this.hookL.clone();
-                        targetPos.y -= 0.26; // Compensazione altezza cavalletto
+                        targetPos.y -= 0.26; 
                         this.cavalletto.object3D.position.copy(targetPos);
                         this.cavalletto.object3D.rotation.set(0, this.angle * Math.PI / 180, 0); 
                     } else {
-                        // Gravità (Cade dritto verso il basso)
-                        if (this.cavalletto.object3D.position.y > 0) {
+                        // Atterraggio (spostato verso la piattaforma o il suolo)
+                        let targetFloorY = 0;
+                        let distHorizDropCav = Math.hypot(this.cavL.x - this.dropL.x, this.cavL.z - this.dropL.z);
+                        if (distHorizDropCav < 0.75) {
+                            targetFloorY = 0.5; // Si appoggia sopra la piattaforma se rilasciato lì
+                        }
+
+                        if (this.cavalletto.object3D.position.y > targetFloorY) {
                             this.cavalletto.object3D.position.y -= dt * 3.0; 
-                            if (this.cavalletto.object3D.position.y <= 0) {
-                                this.cavalletto.object3D.position.y = 0; 
+                            if (this.cavalletto.object3D.position.y <= targetFloorY) {
+                                this.cavalletto.object3D.position.y = targetFloorY; 
                                 this.cavalletto.object3D.rotation.x = 0; 
                                 this.cavalletto.object3D.rotation.z = 0;
                             }
@@ -455,12 +475,13 @@
                     }
                 }
 
-                // Modalità Zoom: Inseguimento dinamico
-                if (this.isZoomed && this.hookArea && this.cameraEl) {
-                    this.hookArea.object3D.getWorldPosition(this.targetWorldPos);
+                // --- INSEGUIMENTO ZOOM (ALLINEATO DI FIANCO LUNGO L'ASTA) ---
+                if (this.isZoomed && this.heliWrapperEl && this.cameraEl) {
+                    this.heliWrapperEl.object3D.getWorldPosition(this.targetWorldPos);
                     this.cameraEl.object3D.getWorldPosition(this.camWorldPos);
                     
-                    let offset = new THREE.Vector3(0, -0.15, -0.4); 
+                    // Inquadratura laterale per vedere l'elicottero e l'asta di fianco
+                    let offset = new THREE.Vector3(0, 0.2, -1.2); 
                     offset.applyQuaternion(this.cameraEl.object3D.quaternion); 
                     
                     let desiredTarget = this.camWorldPos.clone().add(offset);
@@ -525,13 +546,20 @@
             <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; repeat: 1 1"></a-plane>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
-            <!-- IL CAVALLETTO -->
+            <!-- CAVALLETTO (RECUPERO) -->
             <a-entity id="cavalletto" position="-6.48 0 0">
                 <a-cylinder position="0 0.12 0.08" rotation="20 0 0" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
                 <a-cylinder position="-0.08 0.12 -0.04" rotation="-20 0 30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
                 <a-cylinder position="0.08 0.12 -0.04" rotation="-20 0 -30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
                 <a-cylinder position="0 0.22 0" radius="0.03" height="0.05" color="#333"></a-cylinder>
-                <a-sphere id="cavalletto-magnet" position="0 0.26 0" radius="0.03" color="#00FF00" material="emissive: #00FF00"></a-sphere>
+                <!-- SFERA MAGNETE DOPPIA (Diametro 12 cm -> Radius 0.06) -->
+                <a-sphere id="cavalletto-magnet" position="0 0.26 0" radius="0.06" color="#00FF00" material="emissive: #00FF00"></a-sphere>
+            </a-entity>
+
+            <!-- PIATTAFORMA DI RILASCIO (OPPOSTA AL CAVALLETTO) -->
+            <a-entity id="drop-zone" position="6.48 0 0">
+                <a-cylinder position="0 0.25 0" radius="0.75" height="0.5" color="#1976D2"></a-cylinder>
+                <a-ring position="0 0.501 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFEB3B"></a-ring>
             </a-entity>
 
             <!-- VERTIBIRD -->
@@ -555,7 +583,8 @@
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.1 0" radius="0.005" height="0.2" color="#333"></a-cylinder>
                                 <a-torus position="0 -0.2 0" radius="0.03" radius-tubular="0.008" arc="200" rotation="0 0 180" color="#FFD700"></a-torus>
-                                <a-sphere id="hook-magnet" position="0 -0.22 0" radius="0.02" color="#FF00FF" material="emissive: #FF00FF"></a-sphere>
+                                <!-- SFERA MAGNETE DOPPIA (Diametro 8 cm -> Radius 0.04) -->
+                                <a-sphere id="hook-magnet" position="0 -0.22 0" radius="0.04" color="#FF00FF" material="emissive: #FF00FF"></a-sphere>
                                 <a-entity position="0.08 -0.05 0" rotation="-90 0 0" pip-camera="monitor: #hook-monitor"></a-entity>
                             </a-entity>
 
@@ -564,7 +593,7 @@
                 </a-entity>
             </a-entity>
 
-            <!-- MENU PANEL CON NUOVA RIGA "PRECISION" -->
+            <!-- MENU PANEL -->
             <a-entity id="menu-panel" position="-10.5 3.5 0" rotation="0 30 0" visible="true">
                 <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
@@ -595,7 +624,6 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <!-- NUOVA RIGA: PRECISIONE AGGANCIO (Difficulty) -->
                 <a-text value="Precision" position="-1.5 -2.4 0.05" align="left" width="5.5" color="#000000"></a-text>
                 <a-plane id="btn-diff-dec" class="clickable" position="-0.05 -2.4 0.05" width="0.4" height="0.4" color="#D32F2F">
                     <a-text value="-" align="center" width="8" color="#FFF"></a-text>
@@ -605,8 +633,7 @@
                     <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                 </a-plane>
 
-                <!-- Spostata la versione leggermente più in basso -->
-                <a-text id="menu-version-val" value="v7.1.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
+                <a-text id="menu-version-val" value="v8.0.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
 
             <!-- MONITOR TELECAMERA GANCIO -->

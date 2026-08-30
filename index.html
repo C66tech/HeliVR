@@ -9,7 +9,7 @@
     <title>VertiVR Simulator - Custom Model</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE PER LA TELECAMERA SECONDARIA (HOOK CAM ORIENTATA LUNGO L'ASTA)
+        // COMPONENTE PER LA TELECAMERA SECONDARIA (HOOK CAM RUOTABILE)
         AFRAME.registerComponent('pip-camera', {
             schema: { monitor: {type: 'selector'} },
             init: function () {
@@ -75,25 +75,28 @@
             }
         });
 
-        // LOGICA DI VOLO, ATTERRAGGIO E MAGNETE (V 9.0.0)
+        // LOGICA DI VOLO E FISICA (V 10.0.0)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "9.0.0"; 
+                this.version = "10.0.0"; 
                 this.angle = 0;        
-                this.heliY = 0.25;     
-                this.minHeliY = 0.25;  
+                
+                // La piattaforma a ore 3 è alta 0.5m, quindi minHeliY iniziale è 0.75m
+                this.minHeliY = 0.75;  
+                this.heliY = 0.75;     
                 this.radius = 6.48;    
                 
                 this.currentThrottle = 0;
                 this.currentStickY = 0;
                 this.angularVelocity = 0; 
                 this.speedMultiplier = 180.0; 
-                this.wobbleAmplitude = 80;   
+                this.wobbleAmplitude = 30; // Default Wobble a 30
                 this.inertiaValue = 80;     
                 this.rotorAngle = 0;
                 this.currentAngularSpeed = 0; 
 
                 this.hookDifficulty = 1; 
+                this.camOrbitalAngle = -90; // Angolo iniziale Hook Cam
 
                 // Allocazioni vettori
                 this.dragP = new THREE.Vector3();
@@ -104,7 +107,7 @@
                 this.camWorldPos = new THREE.Vector3();
                 this.hookL = new THREE.Vector3();
                 this.cavL = new THREE.Vector3();
-                this.dropL = new THREE.Vector3();
+                this.platL = new THREE.Vector3();
                 this.heliL = new THREE.Vector3();
 
                 this.currentVol = 0;
@@ -133,12 +136,14 @@
                 this.hookMagnet = document.querySelector('#hook-magnet');
                 this.cavMagnet = document.querySelector('#cavalletto-magnet');
                 this.cavalletto = document.querySelector('#cavalletto');
+                this.pipCamRig = document.querySelector('#pip-cam-rig');
                 
-                // Lista Piattaforme per Atterraggio
+                // Piattaforme (Ore 3, Ore 6, Ore 9, Ore 12)
                 this.platforms = [
-                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75 },
-                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75 },
-                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75 }
+                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75 },  // Ore 3
+                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75 },   // Ore 6
+                    { el: document.querySelector('#plat-left'), height: 0.3, radius: 0.75 },   // Ore 9
+                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75 }     // Ore 12
                 ];
                 
                 this.isAttached = false;
@@ -278,6 +283,7 @@
                 let rightGrip = 0;
                 let rightStickY = 0;
                 let rightTrigger = 0; 
+                let leftStickX = 0;
 
                 let xrSession = this.el.sceneEl.renderer?.xr?.getSession(); 
                 
@@ -286,6 +292,7 @@
                         if (source.handedness === 'left' && source.gamepad) {
                             let gp = source.gamepad;
                             leftTrigger = gp.buttons[0] ? gp.buttons[0].value : 0;
+                            leftStickX = gp.axes.length >= 2 ? gp.axes[0] : 0;
                         }
                         if (source.handedness === 'right' && source.gamepad) {
                             let gp = source.gamepad;
@@ -299,7 +306,21 @@
                 if (leftTrigger > 0.02) this.initAudio();
 
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
+                if (Math.abs(leftStickX) < 0.15) leftStickX = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
+
+                // Rotazione orbitale della Hook Cam tramite Stick Sinistro (Destra/Sinistra)
+                if (Math.abs(leftStickX) > 0.15) {
+                    this.camOrbitalAngle += leftStickX * 120.0 * dt; // Velocità di rotazione
+                    if (this.pipCamRig) {
+                        let rad = this.camOrbitalAngle * Math.PI / 180;
+                        let dist = 1.5;
+                        let cx = Math.cos(rad) * dist;
+                        let cz = Math.sin(rad) * dist;
+                        this.pipCamRig.object3D.position.set(cx, -0.1, cz);
+                        this.pipCamRig.object3D.rotation.set(0, -this.camOrbitalAngle - 90, 0);
+                    }
+                }
 
                 // Dragging Diorama
                 if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
@@ -331,8 +352,8 @@
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // --- CALCOLO SUPPORTO PIATTAFORMA DI ATTERRAGGIO ---
-                let activeMinY = this.minHeliY; // Base standard = 0.25m
+                // --- CALCOLO PIATTAFORMA DI ATTERRAGGIO ---
+                let activeMinY = 0.25; // Base del terreno
                 
                 if (this.heliWrapperEl) {
                     this.heliWrapperEl.object3D.getWorldPosition(this.heliL);
@@ -345,10 +366,9 @@
                             this.worldRoot.object3D.worldToLocal(platPos);
 
                             let distHoriz = Math.hypot(this.heliL.x - platPos.x, this.heliL.z - platPos.z);
-                            // Se siamo sopra il cilindro della piattaforma
                             if (distHoriz < plat.radius) {
                                 let surfaceY = plat.height + 0.25; 
-                                if (this.heliY >= (surfaceY - 0.1)) {
+                                if (this.heliY >= (surfaceY - 0.15)) {
                                     activeMinY = Math.max(activeMinY, surfaceY);
                                 }
                             }
@@ -378,7 +398,7 @@
                     effectiveThrottle = (effectiveThrottleInput - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                let targetHeliY = activeMinY + (effectiveThrottle * (maxFlightHeight - (activeMinY - this.minHeliY)));
+                let targetHeliY = activeMinY + (effectiveThrottle * (maxFlightHeight - (activeMinY - 0.25)));
                 this.heliY += (targetHeliY - this.heliY) * dt * 6.0;
                 if (this.heliY < activeMinY) this.heliY = activeMinY;
 
@@ -424,7 +444,7 @@
                     if (this.rotorEl) this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
                 }
 
-                // --- SISTEMA MAGNETICO (SFORE ROSSE AD AGGANCIO) ---
+                // --- SISTEMA MAGNETICO (VERIFICA SU QUALSIASI PIATTAFORMA) ---
                 if (this.hookMagnet && this.cavMagnet && this.cavalletto) {
                     
                     this.hookMagnet.object3D.getWorldPosition(this.hookL);
@@ -433,32 +453,41 @@
                     this.cavMagnet.object3D.getWorldPosition(this.cavL);
                     this.worldRoot.object3D.worldToLocal(this.cavL);
 
-                    let dropZoneEl = document.querySelector('#drop-zone');
-                    if (dropZoneEl) {
-                        dropZoneEl.object3D.getWorldPosition(this.dropL);
-                        this.worldRoot.object3D.worldToLocal(this.dropL);
-                    }
-
                     const tolerances = [0.03, 0.02, 0.015, 0.01, 0.005];
                     let maxAllowedDist = tolerances[this.hookDifficulty - 1];
 
                     let distHookCav = this.hookL.distanceTo(this.cavL);
                     let canGrab = distHookCav < maxAllowedDist; 
 
-                    let distHorizDrop = Math.hypot(this.hookL.x - this.dropL.x, this.hookL.z - this.dropL.z);
-                    let canDrop = (distHorizDrop < 0.75) && (this.hookL.y >= 0.3) && (this.hookL.y <= 1.2);
+                    // Verifica se il gancio si trova sopra UNA QUALSIASI delle piattaforme
+                    let canDrop = false;
+                    let currentPlatHeight = 0;
 
-                    // FEEDBACK COLORI (ROSSO QUANDO PRONTO AD AGGANCIARE)
+                    for (let plat of this.platforms) {
+                        if (plat.el) {
+                            plat.el.object3D.getWorldPosition(this.platL);
+                            this.worldRoot.object3D.worldToLocal(this.platL);
+
+                            let distH = Math.hypot(this.hookL.x - this.platL.x, this.hookL.z - this.platL.z);
+                            if (distH < plat.radius && this.hookL.y >= (plat.height - 0.1) && this.hookL.y <= (plat.height + 1.2)) {
+                                canDrop = true;
+                                currentPlatHeight = plat.height;
+                                break;
+                            }
+                        }
+                    }
+
+                    // FEEDBACK COLORI
                     if (this.isAttached) {
                         if (canDrop) {
-                            this.hookMagnet.setAttribute('color', '#00FF00'); // Verde Fluo: Rilascio Piattaforma
+                            this.hookMagnet.setAttribute('color', '#00FF00'); // VERDE: Pronto al Rilascio!
                             this.cavMagnet.setAttribute('color', '#00FF00');
                         } else {
                             this.hookMagnet.setAttribute('color', '#FFFF00'); // Giallo: In volo
                             this.cavMagnet.setAttribute('color', '#FFFF00');
                         }
                     } else if (canGrab) {
-                        this.hookMagnet.setAttribute('color', '#FF0000'); // ROSSO FLUO: MOMENTO AGGANCIO!
+                        this.hookMagnet.setAttribute('color', '#FF0000'); // Rosso: Momento Aggancio
                         this.cavMagnet.setAttribute('color', '#FF0000');
                     } else {
                         this.hookMagnet.setAttribute('color', '#FF00FF'); // Fucsia/Verde
@@ -468,7 +497,7 @@
                     let triggerPressed = rightTrigger > 0.5;
                     if (triggerPressed && !this.prevRightTrigger) {
                         if (this.isAttached) {
-                            if (canDrop) this.isAttached = false;
+                            if (canDrop) this.isAttached = false; // Sgancia sopra la piattaforma
                         } else if (canGrab) {
                             this.isAttached = true;  
                         }
@@ -481,9 +510,19 @@
                         this.cavalletto.object3D.position.copy(targetPos);
                         this.cavalletto.object3D.rotation.set(0, this.angle * Math.PI / 180, 0); 
                     } else {
+                        // Gravità (Atterra sulla piattaforma o sul suolo)
                         let targetFloorY = 0;
-                        let distHorizDropCav = Math.hypot(this.cavL.x - this.dropL.x, this.cavL.z - this.dropL.z);
-                        if (distHorizDropCav < 0.75) targetFloorY = 0.5; 
+                        for (let plat of this.platforms) {
+                            if (plat.el) {
+                                plat.el.object3D.getWorldPosition(this.platL);
+                                this.worldRoot.object3D.worldToLocal(this.platL);
+                                let distHoriz = Math.hypot(this.cavL.x - this.platL.x, this.cavL.z - this.platL.z);
+                                if (distHoriz < plat.radius) {
+                                    targetFloorY = plat.height;
+                                    break;
+                                }
+                            }
+                        }
 
                         if (this.cavalletto.object3D.position.y > targetFloorY) {
                             this.cavalletto.object3D.position.y -= dt * 3.0; 
@@ -566,32 +605,38 @@
             <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; repeat: 1 1"></a-plane>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
-            <!-- CAVALLETTO -->
-            <a-entity id="cavalletto" position="-6.48 0 0">
-                <a-cylinder position="0 0.12 0.08" rotation="20 0 0" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
-                <a-cylinder position="-0.08 0.12 -0.04" rotation="-20 0 30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
-                <a-cylinder position="0.08 0.12 -0.04" rotation="-20 0 -30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
-                <a-cylinder position="0 0.22 0" radius="0.03" height="0.05" color="#333"></a-cylinder>
-                <a-sphere id="cavalletto-magnet" position="0 0.26 0" radius="0.06" color="#00FF00" material="emissive: #00FF00"></a-sphere>
-            </a-entity>
-
-            <!-- PIATTAFORME DI ATTERRAGGIO AD ALTEZZE DIVERSE -->
-            <!-- 1. Piattaforma Bassa (H: 0.3m) -->
-            <a-entity id="plat-low" position="0 0 -6.48">
-                <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#4CAF50"></a-cylinder>
-                <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
-            </a-entity>
-
-            <!-- 2. Piattaforma Media / Rilascio (H: 0.5m) -->
+            <!-- PIATTAFORME DI ATTERRAGGIO AI QUATTRO PUNTI CARDINALI -->
+            <!-- 1. Ore 3: Piattaforma Blu di Partenza (H: 0.5m) -->
             <a-entity id="drop-zone" position="6.48 0 0">
                 <a-cylinder position="0 0.25 0" radius="0.75" height="0.5" color="#1976D2"></a-cylinder>
                 <a-ring position="0 0.501 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFEB3B"></a-ring>
             </a-entity>
 
-            <!-- 3. Piattaforma Alta (H: 0.8m) -->
+            <!-- 2. Ore 6: Piattaforma Alta Viola (H: 0.8m) -->
             <a-entity id="plat-high" position="0 0 6.48">
                 <a-cylinder position="0 0.40 0" radius="0.75" height="0.8" color="#9C27B0"></a-cylinder>
                 <a-ring position="0 0.801 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
+            </a-entity>
+
+            <!-- 3. Ore 9: Piattaforma Sinistra Arancione per Cavalletto (H: 0.3m) -->
+            <a-entity id="plat-left" position="-6.48 0 0">
+                <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#FF9800"></a-cylinder>
+                <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
+                
+                <!-- CAVALLETTO POSIZIONATO AL CENTRO DELLA PIATTAFORMA A ORE 9 -->
+                <a-entity id="cavalletto" position="0 0.3 0">
+                    <a-cylinder position="0 0.12 0.08" rotation="20 0 0" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
+                    <a-cylinder position="-0.08 0.12 -0.04" rotation="-20 0 30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
+                    <a-cylinder position="0.08 0.12 -0.04" rotation="-20 0 -30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
+                    <a-cylinder position="0 0.22 0" radius="0.03" height="0.05" color="#333"></a-cylinder>
+                    <a-sphere id="cavalletto-magnet" position="0 0.26 0" radius="0.06" color="#00FF00" material="emissive: #00FF00"></a-sphere>
+                </a-entity>
+            </a-entity>
+
+            <!-- 4. Ore 12: Piattaforma Bassa Verde (H: 0.3m) -->
+            <a-entity id="plat-low" position="0 0 -6.48">
+                <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#4CAF50"></a-cylinder>
+                <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
             </a-entity>
 
             <!-- VERTIBIRD -->
@@ -611,14 +656,16 @@
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
-                            <!-- GANCIO E HOOK CAMERA (ORIENTATA DAL PERNO VERSO L'ELICOTTERO) -->
+                            <!-- GANCIO E HOOK CAMERA ORBITALE -->
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.1 0" radius="0.005" height="0.2" color="#333"></a-cylinder>
                                 <a-torus position="0 -0.2 0" radius="0.03" radius-tubular="0.008" arc="200" rotation="0 0 180" color="#FFD700"></a-torus>
                                 <a-sphere id="hook-magnet" position="0 -0.22 0" radius="0.04" color="#FF00FF" material="emissive: #FF00FF"></a-sphere>
                                 
-                                <!-- Telecamera puntata lungo l'asta dal perno verso l'elicottero -->
-                                <a-entity position="-1.5 -0.1 0" rotation="0 -90 0" pip-camera="monitor: #hook-monitor"></a-entity>
+                                <!-- Rig per ruotare la telecamera attorno al gancio -->
+                                <a-entity id="pip-cam-rig" position="0 -0.1 -1.5" rotation="0 0 0">
+                                    <a-entity pip-camera="monitor: #hook-monitor"></a-entity>
+                                </a-entity>
                             </a-entity>
 
                         </a-entity>
@@ -626,10 +673,10 @@
                 </a-entity>
             </a-entity>
 
-            <!-- CONSOLLE SCHERMI AFFIANCATI AL CENTRO SOPRA LA ZONA DI VOLO -->
-            <a-entity id="central-dashboard" position="0 5.2 -2.0" rotation="20 0 0">
+            <!-- CONSOLLE SCHERMI RIALZATA AL CENTRO -->
+            <a-entity id="central-dashboard" position="0 7.5 -2.0" rotation="20 0 0">
                 
-                <!-- MENU PANEL (A Sinistra della Consolle) -->
+                <!-- MENU PANEL (Sinistra) -->
                 <a-entity id="menu-panel" position="-2.2 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
@@ -646,7 +693,7 @@
                     <a-plane id="btn-wind-dec" class="clickable" position="-0.05 -1.0 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-wind-val" value="80" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-text id="menu-wind-val" value="30" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
                     <a-plane id="btn-wind-inc" class="clickable" position="1.35 -1.0 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
@@ -669,10 +716,10 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v9.0.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v10.0.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
 
-                <!-- HOOK CAM MONITOR (A Destra della Consolle) -->
+                <!-- HOOK CAM MONITOR (Destra) -->
                 <a-entity id="monitor-panel" position="2.2 0 0">
                     <a-box position="0 0 -0.05" width="4.2" height="6.4" depth="0.1" color="#222"></a-box>
                     <a-text value="HOOK CAM" position="0 2.6 0.02" align="center" width="7" color="#FFEB3B"></a-text>

@@ -65,10 +65,10 @@
             }
         });
 
-        // LOGICA DI VOLO E GIOCO (V 17.0.0 - SFIDA 1)
+        // LOGICA DI VOLO E GIOCO (V 18.0.0 - HUD COMPLETO + LIVELLO)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "17.0.0"; 
+                this.version = "18.0.0"; 
                 this.angle = 0;        
                 this.heliY = 0.75;     
                 this.radius = 6.48;    
@@ -82,6 +82,7 @@
                 this.rotorAngle = 0;
                 this.currentAngularSpeed = 0; 
                 this.hookDifficulty = 1; 
+                this.gameLevel = 1; // Nuova variabile Livello
                 this.camOrbitalAngle = 90; 
 
                 this.dragP = new THREE.Vector3();
@@ -163,12 +164,6 @@
                     unusedCrate.object3D.position.set(0, -10, 0);
                 }
 
-                // UI e Audio
-                this.speedText = document.querySelector('#menu-speed-val');
-                this.windText = document.querySelector('#menu-wind-val');
-                this.diffText = document.querySelector('#menu-diff-val');
-                this.versionText = document.querySelector('#menu-version-val');
-
                 if (this.worldRoot && this.worldRoot.object3D) {
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
@@ -177,14 +172,45 @@
                     this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, -0.27, Math.sin(rad) * 1.5);
                 }
 
+                // RIPRISTINO HUD COMPLETO
+                this.speedText = document.querySelector('#menu-speed-val');
+                this.windText = document.querySelector('#menu-wind-val');
+                this.inertiaText = document.querySelector('#menu-inertia-val');
+                this.diffText = document.querySelector('#menu-diff-val');
+                this.levelText = document.querySelector('#menu-level-val');
+                this.versionText = document.querySelector('#menu-version-val');
+
                 this.updateMenuUI = () => {
                     if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
                     if (this.windText) this.windText.setAttribute('value', `${this.wobbleAmplitude.toFixed(0)}`);
+                    if (this.inertiaText) this.inertiaText.setAttribute('value', `${this.inertiaValue.toFixed(0)}`);
                     if (this.diffText) this.diffText.setAttribute('value', `Lv ${this.hookDifficulty}`);
+                    if (this.levelText) this.levelText.setAttribute('value', `Lv ${this.gameLevel}`);
                     if (this.versionText) this.versionText.setAttribute('value', `v${this.version}`);
                 };
                 
-                // ... (Event listener per i bottoni UI come prima) ...
+                let btnSpeedDec = document.querySelector('#btn-speed-dec');
+                let btnSpeedInc = document.querySelector('#btn-speed-inc');
+                let btnWindDec = document.querySelector('#btn-wind-dec');
+                let btnWindInc = document.querySelector('#btn-wind-inc');
+                let btnInertiaDec = document.querySelector('#btn-inertia-dec');
+                let btnInertiaInc = document.querySelector('#btn-inertia-inc');
+                let btnDiffDec = document.querySelector('#btn-diff-dec');
+                let btnDiffInc = document.querySelector('#btn-diff-inc');
+                let btnLevelDec = document.querySelector('#btn-level-dec');
+                let btnLevelInc = document.querySelector('#btn-level-inc');
+
+                if (btnSpeedDec) btnSpeedDec.addEventListener('click', () => { this.speedMultiplier = Math.max(10.0, this.speedMultiplier - 15.0); this.updateMenuUI(); });
+                if (btnSpeedInc) btnSpeedInc.addEventListener('click', () => { this.speedMultiplier = Math.min(300.0, this.speedMultiplier + 15.0); this.updateMenuUI(); });
+                if (btnWindDec) btnWindDec.addEventListener('click', () => { this.wobbleAmplitude = Math.max(0, this.wobbleAmplitude - 10); this.updateMenuUI(); });
+                if (btnWindInc) btnWindInc.addEventListener('click', () => { this.wobbleAmplitude = Math.min(150, this.wobbleAmplitude + 10); this.updateMenuUI(); });
+                if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => { this.inertiaValue = Math.max(0, this.inertiaValue - 10); this.updateMenuUI(); });
+                if (btnInertiaInc) btnInertiaInc.addEventListener('click', () => { this.inertiaValue = Math.min(100, this.inertiaValue + 10); this.updateMenuUI(); });
+                if (btnDiffDec) btnDiffDec.addEventListener('click', () => { this.hookDifficulty = Math.max(1, this.hookDifficulty - 1); this.updateMenuUI(); });
+                if (btnDiffInc) btnDiffInc.addEventListener('click', () => { this.hookDifficulty = Math.min(5, this.hookDifficulty + 1); this.updateMenuUI(); });
+                if (btnLevelDec) btnLevelDec.addEventListener('click', () => { this.gameLevel = Math.max(1, this.gameLevel - 1); this.updateMenuUI(); });
+                if (btnLevelInc) btnLevelInc.addEventListener('click', () => { this.gameLevel = Math.min(10, this.gameLevel + 1); this.updateMenuUI(); });
+
                 this.updateMenuUI();
             },
 
@@ -322,11 +348,9 @@
                     let canDrop = false;
                     let targetDropHeight = 0;
                     
-                    // Verifica condizioni di sgancio: Sopra una piazzola + Altezza sufficientemente bassa
                     for (let plat of this.platforms) {
                         let distH = Math.hypot(this.hookL.x - plat.pos.x, this.hookL.z - plat.pos.z);
                         if (distH < plat.radius) {
-                            // Altezza massima di sgancio consentita: non più di 0.8m sopra la piazzola
                             if (this.hookL.y >= plat.height && this.hookL.y <= (plat.height + 0.8)) {
                                 canDrop = true;
                                 targetDropHeight = plat.height;
@@ -335,7 +359,6 @@
                         }
                     }
 
-                    // Reset Colori base
                     allCrates.forEach(c => c.querySelector('.object-magnet').setAttribute('color', '#4CAF50'));
 
                     if (this.attachedCrate) {
@@ -353,18 +376,16 @@
                         this.hookMagnet.setAttribute('color', '#4CAF50'); // Verde
                     }
 
-                    // Azione Grilletto
                     let triggerPressed = rightTrigger > 0.5;
                     if (triggerPressed && !this.prevRightTrigger) {
                         if (this.attachedCrate) {
-                            if (canDrop) { // SGANCIO VINCOLATO
+                            if (canDrop) { 
                                 this.worldRoot.object3D.add(this.attachedCrate.object3D);
-                                // Allinea posizione (mantenendo la x,z del gancio) e appoggia in base alla piazzola
                                 this.attachedCrate.object3D.position.set(this.hookL.x, targetDropHeight + 0.2, this.hookL.z); 
                                 this.attachedCrate.object3D.rotation.set(0, 0, 0);
                                 this.attachedCrate = null;
                             }
-                        } else if (canGrab) { // AGGANCIO
+                        } else if (canGrab) { 
                             this.attachedCrate = closestCrate;
                             this.hookArea.object3D.add(this.attachedCrate.object3D);
                             this.attachedCrate.object3D.position.set(0, -0.762, 0); 
@@ -373,7 +394,6 @@
                     }
                     this.prevRightTrigger = triggerPressed;
 
-                    // Gravità per le casse non agganciate 
                     allCrates.forEach(crate => {
                         if (crate === this.attachedCrate || crate.getAttribute('visible') === false) return;
                         
@@ -388,7 +408,7 @@
                             }
                         }
 
-                        let crateRestY = targetFloorY + 0.2; // La base della cassa è a +0.2 dal suolo
+                        let crateRestY = targetFloorY + 0.2; 
                         if (crate.object3D.position.y > crateRestY) {
                             crate.object3D.position.y -= dt * 3.0; 
                             if (crate.object3D.position.y <= crateRestY) {
@@ -459,35 +479,31 @@
                 <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
             </a-entity>
 
-            <!-- LE 4 CASSE -->
+            <!-- LE 4 CASSE (Calamite incrementate del 15% -> radius="0.046") -->
             <a-entity id="crates-container">
-                <!-- Cassa BLU -->
                 <a-entity class="cargo-crate" data-color="blue" position="0 -10 0">
                     <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img"></a-box>
                     <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#1976D2" material="shader: flat"></a-plane>
                     <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                 </a-entity>
-                <!-- Cassa VIOLA -->
                 <a-entity class="cargo-crate" data-color="purple" position="0 -10 0">
                     <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img"></a-box>
                     <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#9C27B0" material="shader: flat"></a-plane>
                     <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                 </a-entity>
-                <!-- Cassa ARANCIONE -->
                 <a-entity class="cargo-crate" data-color="orange" position="0 -10 0">
                     <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img"></a-box>
                     <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#FF9800" material="shader: flat"></a-plane>
                     <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                 </a-entity>
-                <!-- Cassa VERDE -->
                 <a-entity class="cargo-crate" data-color="green" position="0 -10 0">
                     <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img"></a-box>
                     <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#4CAF50" material="shader: flat"></a-plane>
                     <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                 </a-entity>
             </a-entity>
 
@@ -506,10 +522,10 @@
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
-                            <!-- GANCIO E CAM -->
+                            <!-- GANCIO (Calamita incrementata del 15% -> radius="0.046") -->
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
-                                <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.04" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                                <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                                 <a-entity id="pip-cam-rig">
                                     <a-entity pip-camera="monitor: #hook-monitor"></a-entity>
                                 </a-entity>
@@ -519,16 +535,39 @@
                 </a-entity>
             </a-entity>
 
-            <!-- CONSOLLE SCHERMI -->
+            <!-- CONSOLLE SCHERMI RIALZATA AL CENTRO -->
             <a-entity id="central-dashboard" position="0 7.5 -2.0" rotation="20 0 0">
                 <a-entity id="menu-panel" position="-2.2 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
                     
-                    <a-text value="Precision" position="-1.5 -2.4 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-diff-dec" class="clickable" position="-0.05 -2.4 0.05" width="0.4" height="0.4" color="#D32F2F"><a-text value="-" align="center" width="8" color="#FFF"></a-text></a-plane>
-                    <a-text id="menu-diff-val" value="Lv 1" position="0.6 -2.4 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-diff-inc" class="clickable" position="1.35 -2.4 0.05" width="0.4" height="0.4" color="#388E3C"><a-text value="+" align="center" width="8" color="#FFF"></a-text></a-plane>
-                    <a-text id="menu-version-val" value="v17.0.0 - Sfida 1" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <!-- RIPRISTINO HUD COMPLETO -->
+                    <a-text value="Speed" position="-1.5 0.1 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-dec" class="clickable" position="-0.05 0.1 0.05" width="0.4" height="0.4" color="#D32F2F"><a-text value="-" align="center" width="8" color="#FFF"></a-text></a-plane>
+                    <a-text id="menu-speed-val" value="180 deg/s" position="0.6 0.1 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-inc" class="clickable" position="1.35 0.1 0.05" width="0.4" height="0.4" color="#388E3C"><a-text value="+" align="center" width="8" color="#FFF"></a-text></a-plane>
+
+                    <a-text value="Wobbling" position="-1.5 -0.6 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-dec" class="clickable" position="-0.05 -0.6 0.05" width="0.4" height="0.4" color="#D32F2F"><a-text value="-" align="center" width="8" color="#FFF"></a-text></a-plane>
+                    <a-text id="menu-wind-val" value="30" position="0.6 -0.6 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-inc" class="clickable" position="1.35 -0.6 0.05" width="0.4" height="0.4" color="#388E3C"><a-text value="+" align="center" width="8" color="#FFF"></a-text></a-plane>
+
+                    <a-text value="Inertia" position="-1.5 -1.3 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 -1.3 0.05" width="0.4" height="0.4" color="#D32F2F"><a-text value="-" align="center" width="8" color="#FFF"></a-text></a-plane>
+                    <a-text id="menu-inertia-val" value="80" position="0.6 -1.3 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-inc" class="clickable" position="1.35 -1.3 0.05" width="0.4" height="0.4" color="#388E3C"><a-text value="+" align="center" width="8" color="#FFF"></a-text></a-plane>
+
+                    <a-text value="Precision" position="-1.5 -2.0 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-diff-dec" class="clickable" position="-0.05 -2.0 0.05" width="0.4" height="0.4" color="#D32F2F"><a-text value="-" align="center" width="8" color="#FFF"></a-text></a-plane>
+                    <a-text id="menu-diff-val" value="Lv 1" position="0.6 -2.0 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-diff-inc" class="clickable" position="1.35 -2.0 0.05" width="0.4" height="0.4" color="#388E3C"><a-text value="+" align="center" width="8" color="#FFF"></a-text></a-plane>
+
+                    <!-- NUOVO MENU: LIVELLO -->
+                    <a-text value="Level" position="-1.5 -2.7 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-level-dec" class="clickable" position="-0.05 -2.7 0.05" width="0.4" height="0.4" color="#D32F2F"><a-text value="-" align="center" width="8" color="#FFF"></a-text></a-plane>
+                    <a-text id="menu-level-val" value="Lv 1" position="0.6 -2.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-level-inc" class="clickable" position="1.35 -2.7 0.05" width="0.4" height="0.4" color="#388E3C"><a-text value="+" align="center" width="8" color="#FFF"></a-text></a-plane>
+
+                    <a-text id="menu-version-val" value="v18.0.0 - Sfida 1" position="0 -3.2 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
 
                 <a-entity id="monitor-panel" position="2.2 0 0">

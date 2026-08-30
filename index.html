@@ -9,7 +9,7 @@
     <title>VertiVR Simulator - Custom Model</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE PER LA TELECAMERA SECONDARIA (HOOK CAM RUOTATA DI 180°)
+        // COMPONENTE PER LA TELECAMERA SECONDARIA (PUNTA SEMPRE AL BERSAGLIO)
         AFRAME.registerComponent('pip-camera', {
             schema: { monitor: {type: 'selector'} },
             init: function () {
@@ -19,11 +19,20 @@
                     minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat
                 });
                 this.materialAssigned = false;
+                this.targetPos = new THREE.Vector3();
             },
             tick: function () {
                 const renderer = this.el.sceneEl.renderer;
                 const scene = this.el.sceneEl.object3D;
                 if (!renderer || !scene) return;
+
+                // Forza la telecamera a inquadrare il punto del gancio (#hook-magnet)
+                const targetEl = document.querySelector('#hook-magnet');
+                if (targetEl && targetEl.object3D) {
+                    targetEl.object3D.getWorldPosition(this.targetPos);
+                    this.camera.lookAt(this.targetPos);
+                }
+
                 if (!this.materialAssigned && this.data.monitor) {
                     const mesh = this.data.monitor.getObject3D('mesh');
                     if (mesh && mesh.material) {
@@ -75,10 +84,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 10.1.0 - FIX TRASCINAMENTO CAVALLETTO + HOOK CAM 180)
+        // LOGICA DI VOLO E FISICA (V 11.0.0)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "10.1.0"; 
+                this.version = "11.0.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -95,7 +104,7 @@
                 this.currentAngularSpeed = 0; 
 
                 this.hookDifficulty = 1; 
-                this.camOrbitalAngle = 90; // Ruotata di 180 gradi (da -90 a +90)
+                this.camOrbitalAngle = 90; 
 
                 // Allocazioni vettori
                 this.dragP = new THREE.Vector3();
@@ -140,10 +149,10 @@
                 
                 // Piattaforme (Ore 3, Ore 6, Ore 9, Ore 12)
                 this.platforms = [
-                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75 },  // Ore 3
-                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75 },   // Ore 6
-                    { el: document.querySelector('#plat-left'), height: 0.3, radius: 0.75 },   // Ore 9
-                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75 }     // Ore 12
+                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75 },  
+                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75 },   
+                    { el: document.querySelector('#plat-left'), height: 0.3, radius: 0.75 },   
+                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75 }     
                 ];
                 
                 this.isAttached = false;
@@ -160,11 +169,9 @@
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
 
-                // Inizializza posizione Hook Cam ruotata
                 if (this.pipCamRig) {
                     let rad = this.camOrbitalAngle * Math.PI / 180;
-                    this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, -0.1, Math.sin(rad) * 1.5);
-                    this.pipCamRig.object3D.rotation.set(0, -this.camOrbitalAngle - 90, 0);
+                    this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, 0.2, Math.sin(rad) * 1.5);
                 }
 
                 // Audio
@@ -316,14 +323,13 @@
                 if (Math.abs(leftStickX) < 0.15) leftStickX = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // Controllo oribitale Hook Cam
+                // Controllo orbitale Hook Cam tramite Stick Sinistro
                 if (Math.abs(leftStickX) > 0.15) {
                     this.camOrbitalAngle += leftStickX * 120.0 * dt; 
                     if (this.pipCamRig) {
                         let rad = this.camOrbitalAngle * Math.PI / 180;
                         let dist = 1.5;
-                        this.pipCamRig.object3D.position.set(Math.cos(rad) * dist, -0.1, Math.sin(rad) * dist);
-                        this.pipCamRig.object3D.rotation.set(0, -this.camOrbitalAngle - 90, 0);
+                        this.pipCamRig.object3D.position.set(Math.cos(rad) * dist, 0.2, Math.sin(rad) * dist);
                     }
                 }
 
@@ -503,24 +509,21 @@
                     if (triggerPressed && !this.prevRightTrigger) {
                         if (this.isAttached) {
                             if (canDrop) {
-                                // SGANCIO: Sposta il cavalletto dal Gancio di nuovo nel WorldRoot
                                 this.isAttached = false;
                                 this.worldRoot.object3D.add(this.cavalletto.object3D);
                                 this.cavalletto.object3D.position.copy(this.cavL);
-                                this.cavalletto.object3D.position.y = targetDropHeight + 0.3; // Appoggia sopra la piattaforma
+                                this.cavalletto.object3D.position.y = targetDropHeight + 0.3; 
                                 this.cavalletto.object3D.rotation.set(0, 0, 0);
                             }
                         } else if (canGrab) {
-                            // AGGANCIO: Sposta il cavalletto dentro il HookArea (segue al 100% l'elicottero)
                             this.isAttached = true;  
                             this.hookArea.object3D.add(this.cavalletto.object3D);
-                            this.cavalletto.object3D.position.set(0, -0.26, 0); // Offset fisso sotto il gancio
+                            this.cavalletto.object3D.position.set(0, -0.48, 0); // Offset sotto la sfera magnete
                             this.cavalletto.object3D.rotation.set(0, 0, 0);
                         }
                     }
                     this.prevRightTrigger = triggerPressed;
 
-                    // Caduta per gravità se non è agganciato e sta fluttuando
                     if (!this.isAttached) {
                         let targetFloorY = 0;
                         for (let plat of this.platforms) {
@@ -641,13 +644,25 @@
                 <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
             </a-entity>
 
-            <!-- CAVALLETTO (OGGETTO DA RECUPERARE) -->
+            <!-- CAVALLETTO NUOVO MODELLO ROSSO CON ANELLO/SFERA GIALLA (ORE 9) -->
             <a-entity id="cavalletto" position="-6.48 0.3 0">
-                <a-cylinder position="0 0.12 0.08" rotation="20 0 0" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
-                <a-cylinder position="-0.08 0.12 -0.04" rotation="-20 0 30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
-                <a-cylinder position="0.08 0.12 -0.04" rotation="-20 0 -30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
-                <a-cylinder position="0 0.22 0" radius="0.03" height="0.05" color="#333"></a-cylinder>
-                <a-sphere id="cavalletto-magnet" position="0 0.26 0" radius="0.06" color="#00FF00" material="emissive: #00FF00"></a-sphere>
+                <!-- Trave orizzontale rossa principale -->
+                <a-box position="0 0.35 0" width="0.8" height="0.12" depth="0.1" color="#D32F2F"></a-box>
+                
+                <!-- Gambe rosse ad "A" (Sinistra e Destra) -->
+                <a-cylinder position="-0.3 0.18 0.12" rotation="15 0 10" radius="0.015" height="0.38" color="#D32F2F"></a-cylinder>
+                <a-cylinder position="-0.3 0.18 -0.12" rotation="-15 0 10" radius="0.015" height="0.38" color="#D32F2F"></a-cylinder>
+                <a-cylinder position="0.3 0.18 0.12" rotation="15 0 -10" radius="0.015" height="0.38" color="#D32F2F"></a-cylinder>
+                <a-cylinder position="0.3 0.18 -0.12" rotation="-15 0 -10" radius="0.015" height="0.38" color="#D32F2F"></a-cylinder>
+                
+                <!-- Traverse orizzontali di rinforzo gambe -->
+                <a-box position="0 0.15 0" width="0.65" height="0.02" depth="0.02" color="#D32F2F"></a-box>
+                <a-box position="0 0.22 0" width="0.72" height="0.02" depth="0.02" color="#D32F2F"></a-box>
+
+                <!-- Anello Giallo Superiore -->
+                <a-torus position="0 0.45 0" radius="0.05" radius-tubular="0.01" rotation="0 0 0" color="#FFEB3B"></a-torus>
+                <!-- SFERA MAGNETE CAVALLETTO (Centro dell'anello) -->
+                <a-sphere id="cavalletto-magnet" position="0 0.45 0" radius="0.06" color="#00FF00" material="emissive: #00FF00"></a-sphere>
             </a-entity>
 
             <!-- VERTIBIRD -->
@@ -667,13 +682,13 @@
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
-                            <!-- GANCIO E HOOK CAMERA ORBITALE -->
+                            <!-- GANCIO E HOOK CAMERA CON LOOKAT DISSOCIATO -->
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.1 0" radius="0.005" height="0.2" color="#333"></a-cylinder>
                                 <a-torus position="0 -0.2 0" radius="0.03" radius-tubular="0.008" arc="200" rotation="0 0 180" color="#FFD700"></a-torus>
                                 <a-sphere id="hook-magnet" position="0 -0.22 0" radius="0.04" color="#FF00FF" material="emissive: #FF00FF"></a-sphere>
                                 
-                                <!-- Rig per ruotare la telecamera attorno al gancio -->
+                                <!-- Rig della Hook Cam -->
                                 <a-entity id="pip-cam-rig">
                                     <a-entity pip-camera="monitor: #hook-monitor"></a-entity>
                                 </a-entity>
@@ -727,7 +742,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v10.1.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v11.0.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
 
                 <!-- HOOK CAM MONITOR (Destra) -->

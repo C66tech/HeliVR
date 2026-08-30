@@ -9,7 +9,7 @@
     <title>VertiVR Simulator - Custom Model</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE PER LA TELECAMERA SECONDARIA (PICTURE-IN-PICTURE)
+        // COMPONENTE PER LA TELECAMERA SECONDARIA (HOOK CAM ORIENTATA LUNGO L'ASTA)
         AFRAME.registerComponent('pip-camera', {
             schema: { monitor: {type: 'selector'} },
             init: function () {
@@ -42,7 +42,7 @@
             }
         });
 
-        // COMPONENTE PER RENDERE VIVIDI I COLORI
+        // COMPONENTE COLORI VIVIDI
         AFRAME.registerComponent('make-vivid', {
             init: function () {
                 this.el.addEventListener('model-loaded', () => {
@@ -60,7 +60,7 @@
             }
         });
 
-        // COMPONENTE FALLBACK PER TERRENO
+        // FALLBACK TEXTURE
         AFRAME.registerComponent('texture-fallback', {
             init: function () {
                 const applyFallback = () => {
@@ -75,10 +75,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 8.0.0 - PIATTAFORMA DI RILASCIO E VISTA LATERALE)
+        // LOGICA DI VOLO, ATTERRAGGIO E MAGNETE (V 9.0.0)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "8.0.0"; 
+                this.version = "9.0.0"; 
                 this.angle = 0;        
                 this.heliY = 0.25;     
                 this.minHeliY = 0.25;  
@@ -95,7 +95,7 @@
 
                 this.hookDifficulty = 1; 
 
-                // Variabili allocazione Tick
+                // Allocazioni vettori
                 this.dragP = new THREE.Vector3();
                 this.dragQ = new THREE.Quaternion();
                 this.dragS = new THREE.Vector3();
@@ -105,11 +105,11 @@
                 this.hookL = new THREE.Vector3();
                 this.cavL = new THREE.Vector3();
                 this.dropL = new THREE.Vector3();
+                this.heliL = new THREE.Vector3();
 
                 this.currentVol = 0;
                 this.currentWindVol = 0;
 
-                // Gestione World Root e Zoom
                 this.worldRoot = document.querySelector('#world-root');
                 this.cameraEl = document.querySelector('a-camera');
                 this.heliWrapperEl = document.querySelector('#heli-wrapper');
@@ -130,16 +130,21 @@
                 this.rightHandEl = document.querySelector('#right-hand');
                 this.leftHandEl = document.querySelector('#left-hand');
 
-                // Elementi Magnetici e Piattaforma
                 this.hookMagnet = document.querySelector('#hook-magnet');
                 this.cavMagnet = document.querySelector('#cavalletto-magnet');
                 this.cavalletto = document.querySelector('#cavalletto');
-                this.dropZone = document.querySelector('#drop-zone');
+                
+                // Lista Piattaforme per Atterraggio
+                this.platforms = [
+                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75 },
+                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75 },
+                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75 }
+                ];
                 
                 this.isAttached = false;
                 this.prevRightTrigger = false;
 
-                // Riferimenti Menu
+                // Riferimenti Menu UI
                 this.speedText = document.querySelector('#menu-speed-val');
                 this.windText = document.querySelector('#menu-wind-val');
                 this.inertiaText = document.querySelector('#menu-inertia-val');
@@ -150,7 +155,7 @@
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
 
-                // Inizializzazione Audio
+                // Audio
                 this.audioCtx = null;
                 this.oscillator = null;
                 this.gainNode = null;
@@ -203,7 +208,7 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // LOGICA ZOOM
+                // Zoom Toggle
                 this.toggleZoom = () => {
                     this.isZoomed = !this.isZoomed;
                     if (this.isZoomed) {
@@ -235,7 +240,7 @@
                 this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.04));
                 this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.04));
 
-                // Logica menu UI
+                // UI Menu
                 this.updateMenuUI = () => {
                     if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
                     if (this.windText) this.windText.setAttribute('value', `${this.wobbleAmplitude.toFixed(0)}`);
@@ -296,7 +301,7 @@
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // Grab del Diorama
+                // Dragging Diorama
                 if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
                     let handObj = this.rightHandEl.object3D;
                     if (rightGrip > 0.5 && !this.isZoomed) {
@@ -323,12 +328,36 @@
                     }
                 }
 
-                // Inerzia input
                 this.currentThrottle += (leftTrigger - this.currentThrottle) * dt * 5.0;
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
-                // Fisica Volo
-                let isAirborne = this.heliY > (this.minHeliY + 0.008);
+                // --- CALCOLO SUPPORTO PIATTAFORMA DI ATTERRAGGIO ---
+                let activeMinY = this.minHeliY; // Base standard = 0.25m
+                
+                if (this.heliWrapperEl) {
+                    this.heliWrapperEl.object3D.getWorldPosition(this.heliL);
+                    this.worldRoot.object3D.worldToLocal(this.heliL);
+
+                    for (let plat of this.platforms) {
+                        if (plat.el) {
+                            let platPos = new THREE.Vector3();
+                            plat.el.object3D.getWorldPosition(platPos);
+                            this.worldRoot.object3D.worldToLocal(platPos);
+
+                            let distHoriz = Math.hypot(this.heliL.x - platPos.x, this.heliL.z - platPos.z);
+                            // Se siamo sopra il cilindro della piattaforma
+                            if (distHoriz < plat.radius) {
+                                let surfaceY = plat.height + 0.25; 
+                                if (this.heliY >= (surfaceY - 0.1)) {
+                                    activeMinY = Math.max(activeMinY, surfaceY);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Fisica Volo ed Atterraggio
+                let isAirborne = this.heliY > (activeMinY + 0.008);
                 let wobbleThrottleOffset = 0;
                 let wobbleStickOffset = 0;
 
@@ -349,9 +378,9 @@
                     effectiveThrottle = (effectiveThrottleInput - takeoffThreshold) / (1.0 - takeoffThreshold);
                 }
 
-                let targetHeliY = this.minHeliY + (effectiveThrottle * maxFlightHeight);
+                let targetHeliY = activeMinY + (effectiveThrottle * (maxFlightHeight - (activeMinY - this.minHeliY)));
                 this.heliY += (targetHeliY - this.heliY) * dt * 6.0;
-                if (this.heliY < this.minHeliY) this.heliY = this.minHeliY;
+                if (this.heliY < activeMinY) this.heliY = activeMinY;
 
                 let hingeAngleRad = Math.asin((this.heliY - 0.85) / this.radius);
                 let hingeAngleDeg = hingeAngleRad * (180 / Math.PI);
@@ -390,14 +419,13 @@
                 this.currentAngularSpeed = Math.abs(this.angularVelocity);
                 this.el.setAttribute('rotation', { x: 0, y: this.angle, z: hingeAngleDeg });
 
-                // Pala principale
                 if (this.currentThrottle > 0.01) {
                     this.rotorAngle += (effectiveThrottleInput * 4000) * dt;
                     if (this.rotorEl) this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
                 }
 
-                // --- SISTEMA MAGNETICO ED ESCLUSIVITÀ DI RILASCIO SULLA PIATTAFORMA ---
-                if (this.hookMagnet && this.cavMagnet && this.cavalletto && this.dropZone) {
+                // --- SISTEMA MAGNETICO (SFORE ROSSE AD AGGANCIO) ---
+                if (this.hookMagnet && this.cavMagnet && this.cavalletto) {
                     
                     this.hookMagnet.object3D.getWorldPosition(this.hookL);
                     this.worldRoot.object3D.worldToLocal(this.hookL);
@@ -405,64 +433,57 @@
                     this.cavMagnet.object3D.getWorldPosition(this.cavL);
                     this.worldRoot.object3D.worldToLocal(this.cavL);
 
-                    this.dropZone.object3D.getWorldPosition(this.dropL);
-                    this.worldRoot.object3D.worldToLocal(this.dropL);
+                    let dropZoneEl = document.querySelector('#drop-zone');
+                    if (dropZoneEl) {
+                        dropZoneEl.object3D.getWorldPosition(this.dropL);
+                        this.worldRoot.object3D.worldToLocal(this.dropL);
+                    }
 
-                    // Calcolo tolleranza in base al livello
                     const tolerances = [0.03, 0.02, 0.015, 0.01, 0.005];
                     let maxAllowedDist = tolerances[this.hookDifficulty - 1];
 
                     let distHookCav = this.hookL.distanceTo(this.cavL);
                     let canGrab = distHookCav < maxAllowedDist; 
 
-                    // Verifica se il gancio si trova sopra la Piattaforma di Rilascio (Cilindro raggio 0.75m)
                     let distHorizDrop = Math.hypot(this.hookL.x - this.dropL.x, this.hookL.z - this.dropL.z);
                     let canDrop = (distHorizDrop < 0.75) && (this.hookL.y >= 0.3) && (this.hookL.y <= 1.2);
 
-                    // Gestione Colori Feedback
+                    // FEEDBACK COLORI (ROSSO QUANDO PRONTO AD AGGANCIARE)
                     if (this.isAttached) {
                         if (canDrop) {
-                            this.hookMagnet.setAttribute('color', '#00FF00'); // Verde Fluo: Pronto al Rilascio!
+                            this.hookMagnet.setAttribute('color', '#00FF00'); // Verde Fluo: Rilascio Piattaforma
                             this.cavMagnet.setAttribute('color', '#00FF00');
                         } else {
-                            this.hookMagnet.setAttribute('color', '#FFFF00'); // Giallo: Agganciato in volo
+                            this.hookMagnet.setAttribute('color', '#FFFF00'); // Giallo: In volo
                             this.cavMagnet.setAttribute('color', '#FFFF00');
                         }
                     } else if (canGrab) {
-                        this.hookMagnet.setAttribute('color', '#00FFFF'); // Azzurro: Pronto all'Aggancio!
-                        this.cavMagnet.setAttribute('color', '#00FFFF');
+                        this.hookMagnet.setAttribute('color', '#FF0000'); // ROSSO FLUO: MOMENTO AGGANCIO!
+                        this.cavMagnet.setAttribute('color', '#FF0000');
                     } else {
-                        this.hookMagnet.setAttribute('color', '#FF00FF'); // Fucsia/Verde (Distante)
+                        this.hookMagnet.setAttribute('color', '#FF00FF'); // Fucsia/Verde
                         this.cavMagnet.setAttribute('color', '#00FF00');
                     }
 
-                    // Input Aggancio / Sgancio
                     let triggerPressed = rightTrigger > 0.5;
                     if (triggerPressed && !this.prevRightTrigger) {
                         if (this.isAttached) {
-                            // Sgancio consentito SOLO sopra la piattaforma
-                            if (canDrop) {
-                                this.isAttached = false;
-                            }
+                            if (canDrop) this.isAttached = false;
                         } else if (canGrab) {
                             this.isAttached = true;  
                         }
                     }
                     this.prevRightTrigger = triggerPressed;
 
-                    // Posizionamento Cavalletto
                     if (this.isAttached) {
                         let targetPos = this.hookL.clone();
                         targetPos.y -= 0.26; 
                         this.cavalletto.object3D.position.copy(targetPos);
                         this.cavalletto.object3D.rotation.set(0, this.angle * Math.PI / 180, 0); 
                     } else {
-                        // Atterraggio (spostato verso la piattaforma o il suolo)
                         let targetFloorY = 0;
                         let distHorizDropCav = Math.hypot(this.cavL.x - this.dropL.x, this.cavL.z - this.dropL.z);
-                        if (distHorizDropCav < 0.75) {
-                            targetFloorY = 0.5; // Si appoggia sopra la piattaforma se rilasciato lì
-                        }
+                        if (distHorizDropCav < 0.75) targetFloorY = 0.5; 
 
                         if (this.cavalletto.object3D.position.y > targetFloorY) {
                             this.cavalletto.object3D.position.y -= dt * 3.0; 
@@ -475,12 +496,11 @@
                     }
                 }
 
-                // --- INSEGUIMENTO ZOOM (ALLINEATO DI FIANCO LUNGO L'ASTA) ---
+                // Inseguimento Zoom
                 if (this.isZoomed && this.heliWrapperEl && this.cameraEl) {
                     this.heliWrapperEl.object3D.getWorldPosition(this.targetWorldPos);
                     this.cameraEl.object3D.getWorldPosition(this.camWorldPos);
                     
-                    // Inquadratura laterale per vedere l'elicottero e l'asta di fianco
                     let offset = new THREE.Vector3(0, 0.2, -1.2); 
                     offset.applyQuaternion(this.cameraEl.object3D.quaternion); 
                     
@@ -546,20 +566,32 @@
             <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; repeat: 1 1"></a-plane>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
-            <!-- CAVALLETTO (RECUPERO) -->
+            <!-- CAVALLETTO -->
             <a-entity id="cavalletto" position="-6.48 0 0">
                 <a-cylinder position="0 0.12 0.08" rotation="20 0 0" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
                 <a-cylinder position="-0.08 0.12 -0.04" rotation="-20 0 30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
                 <a-cylinder position="0.08 0.12 -0.04" rotation="-20 0 -30" radius="0.015" height="0.25" color="#FF5722"></a-cylinder>
                 <a-cylinder position="0 0.22 0" radius="0.03" height="0.05" color="#333"></a-cylinder>
-                <!-- SFERA MAGNETE DOPPIA (Diametro 12 cm -> Radius 0.06) -->
                 <a-sphere id="cavalletto-magnet" position="0 0.26 0" radius="0.06" color="#00FF00" material="emissive: #00FF00"></a-sphere>
             </a-entity>
 
-            <!-- PIATTAFORMA DI RILASCIO (OPPOSTA AL CAVALLETTO) -->
+            <!-- PIATTAFORME DI ATTERRAGGIO AD ALTEZZE DIVERSE -->
+            <!-- 1. Piattaforma Bassa (H: 0.3m) -->
+            <a-entity id="plat-low" position="0 0 -6.48">
+                <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#4CAF50"></a-cylinder>
+                <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
+            </a-entity>
+
+            <!-- 2. Piattaforma Media / Rilascio (H: 0.5m) -->
             <a-entity id="drop-zone" position="6.48 0 0">
                 <a-cylinder position="0 0.25 0" radius="0.75" height="0.5" color="#1976D2"></a-cylinder>
                 <a-ring position="0 0.501 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFEB3B"></a-ring>
+            </a-entity>
+
+            <!-- 3. Piattaforma Alta (H: 0.8m) -->
+            <a-entity id="plat-high" position="0 0 6.48">
+                <a-cylinder position="0 0.40 0" radius="0.75" height="0.8" color="#9C27B0"></a-cylinder>
+                <a-ring position="0 0.801 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
             </a-entity>
 
             <!-- VERTIBIRD -->
@@ -579,13 +611,14 @@
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
-                            <!-- GANCIO -->
+                            <!-- GANCIO E HOOK CAMERA (ORIENTATA DAL PERNO VERSO L'ELICOTTERO) -->
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.1 0" radius="0.005" height="0.2" color="#333"></a-cylinder>
                                 <a-torus position="0 -0.2 0" radius="0.03" radius-tubular="0.008" arc="200" rotation="0 0 180" color="#FFD700"></a-torus>
-                                <!-- SFERA MAGNETE DOPPIA (Diametro 8 cm -> Radius 0.04) -->
                                 <a-sphere id="hook-magnet" position="0 -0.22 0" radius="0.04" color="#FF00FF" material="emissive: #FF00FF"></a-sphere>
-                                <a-entity position="0.08 -0.05 0" rotation="-90 0 0" pip-camera="monitor: #hook-monitor"></a-entity>
+                                
+                                <!-- Telecamera puntata lungo l'asta dal perno verso l'elicottero -->
+                                <a-entity position="-1.5 -0.1 0" rotation="0 -90 0" pip-camera="monitor: #hook-monitor"></a-entity>
                             </a-entity>
 
                         </a-entity>
@@ -593,55 +626,60 @@
                 </a-entity>
             </a-entity>
 
-            <!-- MENU PANEL -->
-            <a-entity id="menu-panel" position="-10.5 3.5 0" rotation="0 30 0" visible="true">
-                <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
+            <!-- CONSOLLE SCHERMI AFFIANCATI AL CENTRO SOPRA LA ZONA DI VOLO -->
+            <a-entity id="central-dashboard" position="0 5.2 -2.0" rotation="20 0 0">
+                
+                <!-- MENU PANEL (A Sinistra della Consolle) -->
+                <a-entity id="menu-panel" position="-2.2 0 0" visible="true">
+                    <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                <a-text value="Speed" position="-1.5 -0.3 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-speed-dec" class="clickable" position="-0.05 -0.3 0.05" width="0.4" height="0.4" color="#D32F2F">
-                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
-                <a-text id="menu-speed-val" value="180 deg/s" position="0.6 -0.3 0.05" align="center" width="4.5" color="#000000"></a-text>
-                <a-plane id="btn-speed-inc" class="clickable" position="1.35 -0.3 0.05" width="0.4" height="0.4" color="#388E3C">
-                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
+                    <a-text value="Speed" position="-1.5 -0.3 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-dec" class="clickable" position="-0.05 -0.3 0.05" width="0.4" height="0.4" color="#D32F2F">
+                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-speed-val" value="180 deg/s" position="0.6 -0.3 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-inc" class="clickable" position="1.35 -0.3 0.05" width="0.4" height="0.4" color="#388E3C">
+                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
 
-                <a-text value="Wobbling" position="-1.5 -1.0 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-wind-dec" class="clickable" position="-0.05 -1.0 0.05" width="0.4" height="0.4" color="#D32F2F">
-                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
-                <a-text id="menu-wind-val" value="80" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
-                <a-plane id="btn-wind-inc" class="clickable" position="1.35 -1.0 0.05" width="0.4" height="0.4" color="#388E3C">
-                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
+                    <a-text value="Wobbling" position="-1.5 -1.0 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-dec" class="clickable" position="-0.05 -1.0 0.05" width="0.4" height="0.4" color="#D32F2F">
+                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-wind-val" value="80" position="0.6 -1.0 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-inc" class="clickable" position="1.35 -1.0 0.05" width="0.4" height="0.4" color="#388E3C">
+                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
 
-                <a-text value="Inertia" position="-1.5 -1.7 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 -1.7 0.05" width="0.4" height="0.4" color="#D32F2F">
-                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
-                <a-text id="menu-inertia-val" value="80" position="0.6 -1.7 0.05" align="center" width="4.5" color="#000000"></a-text>
-                <a-plane id="btn-inertia-inc" class="clickable" position="1.35 -1.7 0.05" width="0.4" height="0.4" color="#388E3C">
-                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
+                    <a-text value="Inertia" position="-1.5 -1.7 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 -1.7 0.05" width="0.4" height="0.4" color="#D32F2F">
+                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-inertia-val" value="80" position="0.6 -1.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-inc" class="clickable" position="1.35 -1.7 0.05" width="0.4" height="0.4" color="#388E3C">
+                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
 
-                <a-text value="Precision" position="-1.5 -2.4 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-diff-dec" class="clickable" position="-0.05 -2.4 0.05" width="0.4" height="0.4" color="#D32F2F">
-                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
-                <a-text id="menu-diff-val" value="Lv 1" position="0.6 -2.4 0.05" align="center" width="4.5" color="#000000"></a-text>
-                <a-plane id="btn-diff-inc" class="clickable" position="1.35 -2.4 0.05" width="0.4" height="0.4" color="#388E3C">
-                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
+                    <a-text value="Precision" position="-1.5 -2.4 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-diff-dec" class="clickable" position="-0.05 -2.4 0.05" width="0.4" height="0.4" color="#D32F2F">
+                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-diff-val" value="Lv 1" position="0.6 -2.4 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-diff-inc" class="clickable" position="1.35 -2.4 0.05" width="0.4" height="0.4" color="#388E3C">
+                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
 
-                <a-text id="menu-version-val" value="v8.0.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
-            </a-entity>
+                    <a-text id="menu-version-val" value="v9.0.0" position="0 -3.0 0.05" align="center" width="3.2" color="#000000"></a-text>
+                </a-entity>
 
-            <!-- MONITOR TELECAMERA GANCIO -->
-            <a-entity id="monitor-panel" position="10.5 3.5 0" rotation="0 -30 0">
-                <a-box position="0 0 -0.05" width="4.2" height="4.8" depth="0.1" color="#222"></a-box>
-                <a-text value="HOOK CAM" position="0 2.0 0.02" align="center" width="7" color="#FFEB3B"></a-text>
-                <a-text value="LIVE FEED" position="0 1.6 0.02" align="center" width="3.5" color="#FF0000"></a-text>
-                <a-plane id="hook-monitor" position="0 -0.3 0.01" width="3.8" height="3.8" color="#111"></a-plane>
+                <!-- HOOK CAM MONITOR (A Destra della Consolle) -->
+                <a-entity id="monitor-panel" position="2.2 0 0">
+                    <a-box position="0 0 -0.05" width="4.2" height="6.4" depth="0.1" color="#222"></a-box>
+                    <a-text value="HOOK CAM" position="0 2.6 0.02" align="center" width="7" color="#FFEB3B"></a-text>
+                    <a-text value="LIVE FEED" position="0 2.2 0.02" align="center" width="3.5" color="#FF0000"></a-text>
+                    <a-plane id="hook-monitor" position="0 -0.3 0.01" width="3.8" height="4.8" color="#111"></a-plane>
+                </a-entity>
+
             </a-entity>
 
         </a-entity>

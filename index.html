@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V24.0.0 (Cockpit Cam)</title>
+    <title>VertiVR Simulator - V24.1.0 (Cockpit Fix)</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE COLORI VIVIDI
@@ -42,10 +42,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 24.0.0 - COCKPIT NOSE CAM)
+        // LOGICA DI VOLO E FISICA (V 24.1.0 - FIX BACKGROUND CLIPPING & SCALE)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "24.0.0"; 
+                this.version = "24.1.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -104,19 +104,16 @@
                 this.initialControllerMatrixInv = new THREE.Matrix4();
                 this.initialWorldMatrix = new THREE.Matrix4();
 
-                // 1. CREAZIONE ANCORA DELLA TELECAMERA (COCKPIT)
+                // 1. ANCORA DELLA TELECAMERA COCKPIT (Proporzionata alla scala del modello)
                 this.noseCamAnchor = document.createElement('a-entity');
                 this.noseCamAnchor.setAttribute('id', 'nose-cam-anchor');
                 this.heliPitchEl.appendChild(this.noseCamAnchor);
                 
-                // Posiziona l'ancora a 1.7 in avanti, e -0.6 a destra.
-                // A scala 0.5, la distanza locale di 1.8 corrisponde esattamente a 90 cm veri dal gancio.
-                // L'altezza è impostata su -0.242, millimetricamente allineata all'altezza del gancio.
-                this.noseCamAnchor.object3D.position.set(1.7, -0.242, -0.6);
+                // Posizionamento: X=1.1 (davanti al muso), Y=-0.242 (altezza magnete gancio), Z=-0.35 (leggermente a destra)
+                this.noseCamAnchor.object3D.position.set(1.1, -0.242, -0.35);
                 
-                // Matematica 3D: Per far puntare l'asse visivo della telecamera VR (-Z) verso il gancio,
-                // dobbiamo dire all'ancora di "guardare" esattamente nella direzione opposta (+Z).
-                let targetPos = new THREE.Vector3(0, -0.242, 0); // Posizione del gancio
+                // Orientiamo l'inquadratura in modo che sia puntata esattamente verso il gancio (0, -0.242, 0)
+                let targetPos = new THREE.Vector3(0, -0.242, 0); 
                 let camPos = this.noseCamAnchor.object3D.position;
                 let directionAway = new THREE.Vector3().subVectors(camPos, targetPos);
                 let lookAwayPos = new THREE.Vector3().addVectors(camPos, directionAway);
@@ -159,7 +156,6 @@
                     }
                 }
 
-                // Posizionamento perfetto: Le casse nascono adagiate esattamente sulle piattaforme
                 for(let i=0; i<3; i++) {
                     let crate = selectedCrates[i];
                     let pad = selectedPads[i];
@@ -236,7 +232,7 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // LOGICA COCKPIT CAM (Toggle con tasto X)
+                // TOGGLE VISUALE COCKPIT (Senza alterare la scala del mondo)
                 this.toggleZoom = () => {
                     this.isZoomed = !this.isZoomed;
                     if (this.isZoomed) {
@@ -244,17 +240,13 @@
                         this.prevPos.copy(this.worldRoot.object3D.position);
                         this.prevQuat.copy(this.worldRoot.object3D.quaternion);
                         
-                        // Imposta una scala generosa per farti sentire "dentro" il veicolo
-                        this.currentScale = 0.5; 
-                        
-                        // "Congela" il punto esatto della stanza in cui si trova la tua testa in questo momento.
-                        // L'elicottero parcheggerà esattamente qui.
+                        // Manteniamo la scala naturale del diorama
                         if (this.cameraEl && this.cameraEl.object3D) {
                             this.cameraEl.object3D.updateMatrixWorld(true);
                             this.referenceMatrix.copy(this.cameraEl.object3D.matrixWorld);
                         }
                     } else {
-                        // Ripristina l'intero diorama alla posizione/zoom precedente come se niente fosse
+                        // Ripristino della vista libera
                         this.currentScale = this.prevScale;
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                         this.worldRoot.object3D.position.copy(this.prevPos);
@@ -285,7 +277,6 @@
                     if (this.versionText) this.versionText.setAttribute('value', `v${this.version}`);
                 };
 
-                // (Binding dei pulsanti del menù omessi per brevità, sono identici a prima)
                 let btnSpeedDec = document.querySelector('#btn-speed-dec');
                 let btnSpeedInc = document.querySelector('#btn-speed-inc');
                 let btnWindDec = document.querySelector('#btn-wind-dec');
@@ -315,7 +306,7 @@
                 let dt = delta / 1000;
                 let t = time / 1000; 
                 
-                let leftTrigger = 0, rightGrip = 0, rightStickY = 0, rightTrigger = 0, leftStickX = 0;
+                let leftTrigger = 0, rightGrip = 0, rightStickY = 0, rightTrigger = 0;
                 let xrSession = this.el.sceneEl.renderer?.xr?.getSession(); 
                 
                 if (xrSession && xrSession.inputSources) {
@@ -337,7 +328,6 @@
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // Dragging sbloccato SOLO se NON sei in visuale Cockpit
                 if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
                     let handObj = this.rightHandEl.object3D;
                     if (rightGrip > 0.5 && !this.isZoomed) {
@@ -555,16 +545,14 @@
                     });
                 }
 
-                // 2. GESTIONE FISICA DELLA COCKPIT CAM (Cinetica Inversa del mondo)
+                // CALCOLO TRASFORMAZIONE COCKPIT CAM (Senza alterazione di scala)
                 if (this.isZoomed && this.cameraEl) {
                     
-                    // Forza l'aggiornamento delle matrici di tutti i giunti dell'elicottero
                     this.heliWrapperEl.object3D.updateMatrix();
                     this.heliYawEl.object3D.updateMatrix();
                     this.heliPitchEl.object3D.updateMatrix();
                     this.noseCamAnchor.object3D.updateMatrix();
 
-                    // Calcola la posizione matematica esatta dell'ancora rispetto alla radice del mondo
                     let aLocal = new THREE.Matrix4();
                     aLocal.makeScale(this.currentScale, this.currentScale, this.currentScale);
                     aLocal.multiply(this.heliWrapperEl.object3D.matrix);
@@ -572,13 +560,9 @@
                     aLocal.multiply(this.heliPitchEl.object3D.matrix);
                     aLocal.multiply(this.noseCamAnchor.object3D.matrix);
 
-                    // Invertiamo la matrice: vogliamo capire come muovere il mondo per piazzare l'ancora
                     let aLocalInv = new THREE.Matrix4().copy(aLocal).invert();
-                    
-                    // Applichiamo la matrice inversa al punto di riferimento bloccato (la testa del giocatore)
                     let targetMat = new THREE.Matrix4().multiplyMatrices(this.referenceMatrix, aLocalInv);
                     
-                    // Applichiamo la trasformazione finale al diorama (il "Tapis Roulant")
                     targetMat.decompose(this.worldRoot.object3D.position, this.worldRoot.object3D.quaternion, this.dragS);
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                 }
@@ -767,7 +751,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v24.0.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v24.1.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

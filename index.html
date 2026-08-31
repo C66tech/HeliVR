@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V25.1.0 (Cockpit Cam Rotated 180)</title>
+    <title>VertiVR Simulator - V25.2.0 (Mission & HUD)</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE COLORI VIVIDI
@@ -42,10 +42,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 25.1.0 - COCKPIT CAM 180° FIX)
+        // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "25.1.0"; 
+                this.version = "25.2.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -149,6 +149,18 @@
                     unusedCrate.setAttribute('visible', 'false');
                     unusedCrate.object3D.position.set(0, -10, 0);
                 }
+
+                // IDENTIFICA LA PIATTAFORMA LIBERA E IMPOSTA IL VERTIBIRD
+                this.emptyPad = this.platforms.find(p => !selectedPads.includes(p));
+                this.angle = Math.atan2(-this.emptyPad.dir.z, this.emptyPad.dir.x) * (180 / Math.PI);
+                this.heliY = this.emptyPad.height + 0.25;
+
+                // VARIABILI MISSIONE E TIMER
+                this.statusTextEl = document.querySelector('#game-status-text');
+                this.timerStarted = false;
+                this.timerRunning = false;
+                this.elapsedTime = 0;
+                this.matchedCrates = 0;
 
                 this.speedText = document.querySelector('#menu-speed-val');
                 this.windText = document.querySelector('#menu-wind-val');
@@ -348,6 +360,15 @@
                 let wobbleThrottleOffset = 0;
                 let wobbleStickOffset = 0;
 
+                // GESTIONE TIMER E PARTENZA
+                if (!this.timerStarted && isAirborne) {
+                    this.timerStarted = true;
+                    this.timerRunning = true;
+                }
+                if (this.timerRunning) {
+                    this.elapsedTime += dt;
+                }
+
                 if (this.wobbleAmplitude > 0 && isAirborne) {
                     let normWobble = this.wobbleAmplitude / 100.0;
                     wobbleThrottleOffset = ((Math.sin(t * 2.3) * 0.05) + (Math.cos(t * 4.7) * 0.025)) * normWobble;
@@ -410,12 +431,12 @@
                     if (this.rotorEl) this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
                 }
 
+                let allCrates = Array.from(document.querySelectorAll('.cargo-crate'));
+
                 if (this.hookMagnet && this.hookArea) {
-                    
                     this.hookMagnet.object3D.getWorldPosition(this.hookL);
                     this.worldRoot.object3D.worldToLocal(this.hookL);
 
-                    let allCrates = Array.from(document.querySelectorAll('.cargo-crate'));
                     let closestCrate = null;
                     let minDist = Infinity;
 
@@ -513,6 +534,49 @@
                             }
                         }
                     });
+                }
+
+                // CONTROLLO VITTORIA E AGGIORNAMENTO HUD
+                let matched = 0;
+                allCrates.forEach(crate => {
+                    if (crate.getAttribute('visible') === 'false' || crate.getAttribute('visible') === false) return;
+                    if (crate === this.attachedCrate) return;
+                    
+                    let crateColor = crate.dataset.color;
+                    let cx = crate.object3D.position.x;
+                    let cz = crate.object3D.position.z;
+                    let cy = crate.object3D.position.y;
+                    
+                    let matchingPlat = this.platforms.find(p => p.color === crateColor);
+                    if (matchingPlat) {
+                        let distH = Math.hypot(cx - matchingPlat.pos.x, cz - matchingPlat.pos.z);
+                        if (distH < matchingPlat.radius && Math.abs(cy - matchingPlat.height) < 0.05) {
+                            matched++;
+                        }
+                    }
+                });
+                this.matchedCrates = matched;
+
+                if (this.matchedCrates === 3 && this.timerRunning && !isAirborne) {
+                    let distToEmpty = Math.hypot(this.heliL.x - this.emptyPad.pos.x, this.heliL.z - this.emptyPad.pos.z);
+                    if (distToEmpty < this.emptyPad.radius) {
+                        this.timerRunning = false;
+                    }
+                }
+
+                if (this.statusTextEl) {
+                    let m = Math.floor(this.elapsedTime / 60);
+                    let s = Math.floor(this.elapsedTime % 60);
+                    let ms = Math.floor((this.elapsedTime % 1) * 10);
+                    let timeStr = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}.${ms}`;
+                    
+                    if (this.matchedCrates === 3 && !this.timerRunning && this.timerStarted) {
+                        this.statusTextEl.setAttribute('value', `VITTORIA! Tempo: ${timeStr}`);
+                        this.statusTextEl.setAttribute('color', '#388E3C');
+                    } else {
+                        this.statusTextEl.setAttribute('value', `Casse: ${this.matchedCrates}/3 | Tempo: ${timeStr}`);
+                        this.statusTextEl.setAttribute('color', '#1976D2');
+                    }
                 }
 
                 if (this.audioInitialized && this.audioCtx) {
@@ -645,11 +709,10 @@
                                 <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                             </a-entity>
 
-                            <!-- CONTENITORE DELLA COCKPIT CAM (Spostiamo e ruotiamo questo!) -->
-<a-entity id="cockpit-rig" position="0.95 -1.4 -0.95" rotation="0 150 0">
-    <!-- Fotocamera pulita con offset zero -->
-    <a-camera id="cockpit-camera" position="0 0 0" rotation="0 0 0" active="false" wasd-controls-enabled="false" look-controls="enabled: false"></a-camera>
-</a-entity>
+                            <!-- CONTENITORE DELLA COCKPIT CAM -->
+                            <a-entity id="cockpit-rig" position="0.95 -1.4 -0.95" rotation="0 150 0">
+                                <a-camera id="cockpit-camera" position="0 0 0" rotation="0 0 0" active="false" wasd-controls-enabled="false" look-controls="enabled: false"></a-camera>
+                            </a-entity>
 
                         </a-entity>
                     </a-entity>
@@ -660,6 +723,9 @@
             <a-entity id="central-dashboard" position="0 7.5 -2.0" rotation="20 0 0">
                 <a-entity id="menu-panel" position="0 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
+
+                    <!-- TESTO MISSIONE E TIMER HUD -->
+                    <a-text id="game-status-text" value="Casse: 0/3 | Tempo: 00:00.0" position="0 2.5 0.05" align="center" width="5.5" color="#1976D2" font="mozillavr"></a-text>
 
                     <a-text value="Speed" position="-1.5 1.3 0.05" align="left" width="5.5" color="#000000"></a-text>
                     <a-plane id="btn-speed-dec" class="clickable" position="-0.05 1.3 0.05" width="0.4" height="0.4" color="#D32F2F">
@@ -706,7 +772,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v25.1.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v25.2.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

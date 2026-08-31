@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - Zoom Update</title>
+    <title>VertiVR Simulator - V22.0.0 (Orbital Zoom)</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE COLORI VIVIDI
@@ -42,10 +42,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 21.0.0 - ZOOM A ORE 4, NO HOOK CAM)
+        // LOGICA DI VOLO E FISICA (V 22.0.0 - ORBITAL ZOOM)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "21.0.0"; 
+                this.version = "22.0.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -63,6 +63,9 @@
 
                 this.hookToleranceLevel = 1; 
                 this.gameLevel = 1; 
+                
+                // Variabile per la rotazione dell'orbita attorno al gancio
+                this.zoomOrbitAngle = 0; 
 
                 // Allocazioni vettori
                 this.dragP = new THREE.Vector3();
@@ -215,16 +218,18 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // LOGICA ZOOM SUL GANCIO (Tasto X Sinistro)
+                // LOGICA ZOOM CON RITORNO ALLO STATO ESATTO PRECEDENTE
                 this.toggleZoom = () => {
                     this.isZoomed = !this.isZoomed;
                     if (this.isZoomed) {
+                        this.zoomOrbitAngle = 0; // Resetta l'angolo di orbita
                         this.prevScale = this.currentScale;
                         this.prevPos.copy(this.worldRoot.object3D.position);
                         this.prevQuat.copy(this.worldRoot.object3D.quaternion);
                         this.currentScale = this.prevScale * 3.5; 
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                     } else {
+                        // Quando esce, ripristina il mondo ESATTAMENTE dove e come era prima
                         this.currentScale = this.prevScale;
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                         this.worldRoot.object3D.position.copy(this.prevPos);
@@ -232,7 +237,6 @@
                     }
                 };
 
-                // Assegna lo zoom al pulsante X sul controller sinistro
                 this.leftHandEl.addEventListener('xbuttondown', this.toggleZoom);
 
                 const applyScale = (delta) => {
@@ -308,6 +312,11 @@
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (Math.abs(leftStickX) < 0.15) leftStickX = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
+
+                // Rotazione orbitale con il controller sinistro (SOLO quando lo zoom è attivo)
+                if (Math.abs(leftStickX) > 0.15 && this.isZoomed) {
+                    this.zoomOrbitAngle += leftStickX * 90.0 * dt; 
+                }
 
                 if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
                     let handObj = this.rightHandEl.object3D;
@@ -447,10 +456,8 @@
                     }
 
                     let activeObjMagnet = closestCrate ? closestCrate.querySelector('.object-magnet') : null;
-                    
                     let maxAllowedDist = 0.06 - ((this.hookToleranceLevel - 1) * 0.005);
                     let canGrab = !this.attachedCrate && closestCrate && (minDist < maxAllowedDist); 
-
                     let canDrop = false;
                     let targetDropHeight = 0;
 
@@ -467,9 +474,7 @@
 
                     allCrates.forEach(c => {
                         let mag = c.querySelector('.object-magnet');
-                        if (mag && mag !== activeObjMagnet) {
-                            mag.setAttribute('color', '#4CAF50');
-                        }
+                        if (mag && mag !== activeObjMagnet) mag.setAttribute('color', '#4CAF50');
                     });
 
                     if (this.attachedCrate) {
@@ -530,16 +535,23 @@
                     });
                 }
 
-                // GESTIONE ZOOM (Ore 4:00 - Offset HUD lock)
+                // ESECUZIONE ORBITA: Ruota il mondo attorno al gancio senza toccare la telecamera
                 if (this.isZoomed && this.hookMagnet && this.cameraEl) {
+                    
+                    // 1. Applica la rotazione orbitale orizzontale (Y) alla rotazione originaria del diorama
+                    let orbitQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.zoomOrbitAngle * Math.PI / 180);
+                    this.worldRoot.object3D.quaternion.copy(orbitQuat).multiply(this.prevQuat);
+                    this.worldRoot.object3D.updateMatrixWorld(true);
+
+                    // 2. Calcola le nuove posizioni del gancio e della telecamera
                     this.hookMagnet.object3D.getWorldPosition(this.targetWorldPos);
                     this.cameraEl.object3D.getWorldPosition(this.camWorldPos);
                     
-                    // Offset locale rispetto alla telecamera: -0.5m Sinistra, -0.2m Basso, -0.7m Avanti
-                    // Questo posiziona il punto di vista del giocatore "a ore 4" rispetto al gancio
-                    let offset = new THREE.Vector3(-0.5, -0.2, -0.7); 
+                    // 3. Offset di sicurezza per la telecamera (25cm di distanza, 5cm in basso) bloccato davanti al viso
+                    let offset = new THREE.Vector3(0, -0.05, -0.25); 
                     offset.applyQuaternion(this.cameraEl.object3D.quaternion); 
                     
+                    // 4. Trasla l'intero diorama affinché il gancio si posizioni esattamente in quello spot
                     let desiredTarget = this.camWorldPos.clone().add(offset);
                     let shift = desiredTarget.sub(this.targetWorldPos);
                     this.worldRoot.object3D.position.add(shift);
@@ -656,13 +668,11 @@
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 0.85 0" vertibird-flight>
-                
                 <a-box id="rod" position="3.24 0 0" width="6.48" height="0.02" depth="0.02" color="#808080"></a-box>
                 
                 <a-entity id="heli-wrapper" position="6.48 0 0">
                     <a-entity id="heli-yaw" rotation="0 90 0">
                         <a-entity id="heli-pitch" rotation="0 0 0">
-                            
                             <a-gltf-model src="#verti-model" make-vivid position="-0.10 0.2 0" scale="2.415 2.415 2.415" rotation="0 180 0"></a-gltf-model>
 
                             <a-entity position="-0.10 0.48 0">
@@ -676,13 +686,12 @@
                                 <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
                                 <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                             </a-entity>
-
                         </a-entity>
                     </a-entity>
                 </a-entity>
             </a-entity>
 
-            <!-- CONSOLLE SCHERMI CENTRATA (Senza monitor secondario) -->
+            <!-- CONSOLLE SCHERMI CENTRATA -->
             <a-entity id="central-dashboard" position="0 7.5 -2.0" rotation="20 0 0">
                 <a-entity id="menu-panel" position="0 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
@@ -732,7 +741,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v21.0.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v22.0.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

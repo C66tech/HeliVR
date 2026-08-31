@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V20.0.0</title>
+    <title>VertiVR Simulator - V20.1.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE PER LA TELECAMERA SECONDARIA (CON FIX ANTI-CRASH)
@@ -101,10 +101,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 20.0.0 - STABILE + PITAGORA)
+        // LOGICA DI VOLO E FISICA (V 20.1.0 - FIX APPOGGIO, HUD & MAGNETI)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "20.0.0"; 
+                this.version = "20.1.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -170,7 +170,7 @@
                     { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75, color: 'green', dir: {x: 0, z: -1} }     
                 ];
 
-                // CORREZIONE PITAGORICA: ricalcola e posiziona le piazzole in base all'arco
+                // CORREZIONE PITAGORICA: Ricalcola e posiziona le piazzole in base all'arco
                 this.platforms.forEach(plat => {
                     let hHover = plat.height + 0.762;
                     let dY = hHover - 0.85; 
@@ -202,6 +202,7 @@
                     }
                 }
 
+                // FIX APPOGGIO CASSA: plat.height (altezza piazzola) + 0.2 (centro cassa) = appoggio perfetto sulla superficie
                 for(let i=0; i<3; i++) {
                     let crate = selectedCrates[i];
                     let pad = selectedPads[i];
@@ -341,11 +342,9 @@
                 if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => { this.inertiaValue = Math.max(0, this.inertiaValue - 10); this.updateMenuUI(); });
                 if (btnInertiaInc) btnInertiaInc.addEventListener('click', () => { this.inertiaValue = Math.min(100, this.inertiaValue + 10); this.updateMenuUI(); });
                 
-                // Tolleranza: 10 Livelli
                 if (btnTolDec) btnTolDec.addEventListener('click', () => { this.hookToleranceLevel = Math.max(1, this.hookToleranceLevel - 1); this.updateMenuUI(); });
                 if (btnTolInc) btnTolInc.addEventListener('click', () => { this.hookToleranceLevel = Math.min(10, this.hookToleranceLevel + 1); this.updateMenuUI(); });
                 
-                // Livello
                 if (btnLevelDec) btnLevelDec.addEventListener('click', () => { this.gameLevel = Math.max(1, this.gameLevel - 1); this.updateMenuUI(); });
                 if (btnLevelInc) btnLevelInc.addEventListener('click', () => { this.gameLevel = Math.min(10, this.gameLevel + 1); this.updateMenuUI(); });
 
@@ -529,7 +528,6 @@
 
                     let activeObjMagnet = closestCrate ? closestCrate.querySelector('.object-magnet') : null;
                     
-                    // TOLLERANZA: 10 Livelli, da 0.06m a scalare di 0.005m
                     let maxAllowedDist = 0.06 - ((this.hookToleranceLevel - 1) * 0.005);
                     let canGrab = !this.attachedCrate && closestCrate && (minDist < maxAllowedDist); 
 
@@ -547,10 +545,12 @@
                         }
                     }
 
-                    // Ripristino del colore neutro per le casse lontane
+                    // FIX RESET COLORE MAGNETE: Resetta tutte le casse non attive al verde originale (#4CAF50)
                     allCrates.forEach(c => {
                         let mag = c.querySelector('.object-magnet');
-                        if (mag && mag !== activeObjMagnet) mag.setAttribute('color', '#4CAF50');
+                        if (mag && mag !== activeObjMagnet) {
+                            mag.setAttribute('color', '#4CAF50');
+                        }
                     });
 
                     if (this.attachedCrate) {
@@ -566,6 +566,7 @@
                         if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#FF0000');
                     } else {
                         this.hookMagnet.setAttribute('color', '#4CAF50'); 
+                        if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#4CAF50');
                     }
 
                     let triggerPressed = rightTrigger > 0.5;
@@ -573,7 +574,7 @@
                         if (this.attachedCrate) {
                             if (canDrop) {
                                 this.worldRoot.object3D.add(this.attachedCrate.object3D);
-                                // Allinea posizione (mantenendo la x,z del gancio) e appoggia in base alla piazzola
+                                // FIX APPOGGIO CASSA SU PIATTAFORMA: plat.height + 0.2
                                 this.attachedCrate.object3D.position.set(this.hookL.x, targetDropHeight + 0.2, this.hookL.z); 
                                 this.attachedCrate.object3D.rotation.set(0, 0, 0);
                                 this.attachedCrate = null;
@@ -601,6 +602,7 @@
                             }
                         }
 
+                        // FIX APPOGGIO CASSA A TERRA
                         let crateRestY = targetFloorY + 0.2; 
                         if (crate.object3D.position.y > crateRestY) {
                             crate.object3D.position.y -= dt * 3.0; 
@@ -750,7 +752,6 @@
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
-                            <!-- GANCIO CON MAGNETE MAGGIORATO 15% -->
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
                                 <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
@@ -771,52 +772,53 @@
                 <a-entity id="menu-panel" position="-2.2 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                    <a-text value="Speed" position="-1.5 0.1 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-speed-dec" class="clickable" position="-0.05 0.1 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <!-- FIX HUD: TRASLATO VERSO L'ALTO PER FAR RIENTRARE TUTTO (+1.2m) -->
+                    <a-text value="Speed" position="-1.5 1.3 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-dec" class="clickable" position="-0.05 1.3 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-speed-val" value="180 deg/s" position="0.6 0.1 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-speed-inc" class="clickable" position="1.35 0.1 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-speed-val" value="180 deg/s" position="0.6 1.3 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-inc" class="clickable" position="1.35 1.3 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text value="Wobbling" position="-1.5 -0.6 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-wind-dec" class="clickable" position="-0.05 -0.6 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="Wobbling" position="-1.5 0.6 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-dec" class="clickable" position="-0.05 0.6 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-wind-val" value="30" position="0.6 -0.6 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-wind-inc" class="clickable" position="1.35 -0.6 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-wind-val" value="30" position="0.6 0.6 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-inc" class="clickable" position="1.35 0.6 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text value="Inertia" position="-1.5 -1.3 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 -1.3 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="Inertia" position="-1.5 -0.1 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 -0.1 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-inertia-val" value="80" position="0.6 -1.3 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-inertia-inc" class="clickable" position="1.35 -1.3 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-inertia-val" value="80" position="0.6 -0.1 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-inc" class="clickable" position="1.35 -0.1 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text value="Tolerance" position="-1.5 -2.0 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-tol-dec" class="clickable" position="-0.05 -2.0 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="Tolerance" position="-1.5 -0.8 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-tol-dec" class="clickable" position="-0.05 -0.8 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-tol-val" value="Lv 1" position="0.6 -2.0 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-tol-inc" class="clickable" position="1.35 -2.0 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-tol-val" value="Lv 1" position="0.6 -0.8 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-tol-inc" class="clickable" position="1.35 -0.8 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text value="Level" position="-1.5 -2.7 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-level-dec" class="clickable" position="-0.05 -2.7 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="Level" position="-1.5 -1.5 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-level-dec" class="clickable" position="-0.05 -1.5 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-level-val" value="Lv 1" position="0.6 -2.7 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-level-inc" class="clickable" position="1.35 -2.7 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-level-val" value="Lv 1" position="0.6 -1.5 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-level-inc" class="clickable" position="1.35 -1.5 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v20.0.0" position="0 -3.2 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v20.1.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
 
                 <a-entity id="monitor-panel" position="2.2 0 0">

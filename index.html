@@ -6,68 +6,9 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V20.1.0</title>
+    <title>VertiVR Simulator - Zoom Update</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE PER LA TELECAMERA SECONDARIA (CON FIX ANTI-CRASH)
-        AFRAME.registerComponent('pip-camera', {
-            schema: { monitor: {type: 'selector'} },
-            init: function () {
-                this.camera = new THREE.PerspectiveCamera(60, 1, 0.05, 100);
-                this.el.object3D.add(this.camera);
-                this.renderTarget = new THREE.WebGLRenderTarget(256, 256, {
-                    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat
-                });
-                this.materialAssigned = false;
-                this.targetPos = new THREE.Vector3();
-                
-                this.isTransitioning = false;
-                this.el.sceneEl.addEventListener('enter-vr', () => {
-                    this.isTransitioning = true;
-                    setTimeout(() => { this.isTransitioning = false; }, 1000);
-                });
-                this.el.sceneEl.addEventListener('exit-vr', () => {
-                    this.isTransitioning = true;
-                    setTimeout(() => { this.isTransitioning = false; }, 1000);
-                });
-            },
-            tick: function () {
-                if (this.isTransitioning) return;
-
-                const renderer = this.el.sceneEl.renderer;
-                const scene = this.el.sceneEl.object3D;
-                if (!renderer || !scene) return;
-                if (this.el.sceneEl.is('vr-mode') && (!renderer.xr || !renderer.xr.isPresenting)) return;
-
-                const targetEl = document.querySelector('#hook-magnet');
-                if (targetEl && targetEl.object3D) {
-                    targetEl.object3D.getWorldPosition(this.targetPos);
-                    this.camera.lookAt(this.targetPos);
-                }
-
-                if (!this.materialAssigned && this.data.monitor) {
-                    const mesh = this.data.monitor.getObject3D('mesh');
-                    if (mesh && mesh.material) {
-                        mesh.material = new THREE.MeshBasicMaterial({ map: this.renderTarget.texture, side: THREE.FrontSide });
-                        this.materialAssigned = true;
-                    }
-                }
-                
-                const currentXrEnabled = renderer.xr.enabled;
-                const currentRenderTarget = renderer.getRenderTarget();
-                
-                if (currentXrEnabled) renderer.xr.enabled = false;
-                
-                renderer.setRenderTarget(this.renderTarget);
-                renderer.clear();
-                renderer.render(scene, this.camera);
-                
-                renderer.setRenderTarget(currentRenderTarget);
-                
-                if (currentXrEnabled) renderer.xr.enabled = true;
-            }
-        });
-
         // COMPONENTE COLORI VIVIDI
         AFRAME.registerComponent('make-vivid', {
             init: function () {
@@ -101,10 +42,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 20.1.0 - FIX APPOGGIO, HUD & MAGNETI)
+        // LOGICA DI VOLO E FISICA (V 21.0.0 - ZOOM A ORE 4, NO HOOK CAM)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "20.1.0"; 
+                this.version = "21.0.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -122,7 +63,6 @@
 
                 this.hookToleranceLevel = 1; 
                 this.gameLevel = 1; 
-                this.camOrbitalAngle = 90; 
 
                 // Allocazioni vettori
                 this.dragP = new THREE.Vector3();
@@ -161,7 +101,6 @@
 
                 this.hookArea = document.querySelector('#hook-area');
                 this.hookMagnet = document.querySelector('#hook-magnet');
-                this.pipCamRig = document.querySelector('#pip-cam-rig');
                 
                 this.platforms = [
                     { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75, color: 'blue', dir: {x: 1, z: 0} },  
@@ -170,7 +109,6 @@
                     { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75, color: 'green', dir: {x: 0, z: -1} }     
                 ];
 
-                // CORREZIONE PITAGORICA: Ricalcola e posiziona le piazzole in base all'arco
                 this.platforms.forEach(plat => {
                     let hHover = plat.height + 0.762;
                     let dY = hHover - 0.85; 
@@ -183,7 +121,6 @@
                 this.attachedCrate = null;
                 this.prevRightTrigger = false;
 
-                // SETUP SFIDA 1: Posiziona a caso 3 casse su 3 piazzole
                 let allCrates = Array.from(document.querySelectorAll('.cargo-crate'));
                 let shuffledPads = [...this.platforms].sort(() => 0.5 - Math.random());
                 let selectedPads = shuffledPads.slice(0, 3);
@@ -202,7 +139,6 @@
                     }
                 }
 
-                // FIX APPOGGIO CASSA: plat.height (altezza piazzola) + 0.2 (centro cassa) = appoggio perfetto sulla superficie
                 for(let i=0; i<3; i++) {
                     let crate = selectedCrates[i];
                     let pad = selectedPads[i];
@@ -225,11 +161,6 @@
 
                 if (this.worldRoot && this.worldRoot.object3D) {
                     this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
-                }
-
-                if (this.pipCamRig) {
-                    let rad = this.camOrbitalAngle * Math.PI / 180;
-                    this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, -0.27, Math.sin(rad) * 1.5);
                 }
 
                 this.audioCtx = null;
@@ -284,6 +215,7 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
+                // LOGICA ZOOM SUL GANCIO (Tasto X Sinistro)
                 this.toggleZoom = () => {
                     this.isZoomed = !this.isZoomed;
                     if (this.isZoomed) {
@@ -300,8 +232,8 @@
                     }
                 };
 
+                // Assegna lo zoom al pulsante X sul controller sinistro
                 this.leftHandEl.addEventListener('xbuttondown', this.toggleZoom);
-                this.leftHandEl.addEventListener('ybuttondown', this.toggleZoom);
 
                 const applyScale = (delta) => {
                     if (this.isZoomed) return; 
@@ -341,10 +273,8 @@
                 if (btnWindInc) btnWindInc.addEventListener('click', () => { this.wobbleAmplitude = Math.min(150, this.wobbleAmplitude + 10); this.updateMenuUI(); });
                 if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => { this.inertiaValue = Math.max(0, this.inertiaValue - 10); this.updateMenuUI(); });
                 if (btnInertiaInc) btnInertiaInc.addEventListener('click', () => { this.inertiaValue = Math.min(100, this.inertiaValue + 10); this.updateMenuUI(); });
-                
                 if (btnTolDec) btnTolDec.addEventListener('click', () => { this.hookToleranceLevel = Math.max(1, this.hookToleranceLevel - 1); this.updateMenuUI(); });
                 if (btnTolInc) btnTolInc.addEventListener('click', () => { this.hookToleranceLevel = Math.min(10, this.hookToleranceLevel + 1); this.updateMenuUI(); });
-                
                 if (btnLevelDec) btnLevelDec.addEventListener('click', () => { this.gameLevel = Math.max(1, this.gameLevel - 1); this.updateMenuUI(); });
                 if (btnLevelInc) btnLevelInc.addEventListener('click', () => { this.gameLevel = Math.min(10, this.gameLevel + 1); this.updateMenuUI(); });
 
@@ -375,19 +305,9 @@
                 }
 
                 if (leftTrigger > 0.02) this.initAudio();
-
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (Math.abs(leftStickX) < 0.15) leftStickX = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
-
-                if (Math.abs(leftStickX) > 0.15) {
-                    this.camOrbitalAngle += leftStickX * 120.0 * dt; 
-                    if (this.pipCamRig) {
-                        let rad = this.camOrbitalAngle * Math.PI / 180;
-                        let dist = 1.5;
-                        this.pipCamRig.object3D.position.set(Math.cos(rad) * dist, -0.27, Math.sin(rad) * dist);
-                    }
-                }
 
                 if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
                     let handObj = this.rightHandEl.object3D;
@@ -545,7 +465,6 @@
                         }
                     }
 
-                    // FIX RESET COLORE MAGNETE: Resetta tutte le casse non attive al verde originale (#4CAF50)
                     allCrates.forEach(c => {
                         let mag = c.querySelector('.object-magnet');
                         if (mag && mag !== activeObjMagnet) {
@@ -566,7 +485,6 @@
                         if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#FF0000');
                     } else {
                         this.hookMagnet.setAttribute('color', '#4CAF50'); 
-                        if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#4CAF50');
                     }
 
                     let triggerPressed = rightTrigger > 0.5;
@@ -574,7 +492,6 @@
                         if (this.attachedCrate) {
                             if (canDrop) {
                                 this.worldRoot.object3D.add(this.attachedCrate.object3D);
-                                // FIX APPOGGIO CASSA SU PIATTAFORMA: plat.height + 0.2
                                 this.attachedCrate.object3D.position.set(this.hookL.x, targetDropHeight + 0.2, this.hookL.z); 
                                 this.attachedCrate.object3D.rotation.set(0, 0, 0);
                                 this.attachedCrate = null;
@@ -602,7 +519,6 @@
                             }
                         }
 
-                        // FIX APPOGGIO CASSA A TERRA
                         let crateRestY = targetFloorY + 0.2; 
                         if (crate.object3D.position.y > crateRestY) {
                             crate.object3D.position.y -= dt * 3.0; 
@@ -614,11 +530,14 @@
                     });
                 }
 
-                if (this.isZoomed && this.heliWrapperEl && this.cameraEl) {
-                    this.heliWrapperEl.object3D.getWorldPosition(this.targetWorldPos);
+                // GESTIONE ZOOM (Ore 4:00 - Offset HUD lock)
+                if (this.isZoomed && this.hookMagnet && this.cameraEl) {
+                    this.hookMagnet.object3D.getWorldPosition(this.targetWorldPos);
                     this.cameraEl.object3D.getWorldPosition(this.camWorldPos);
                     
-                    let offset = new THREE.Vector3(0, 0.2, -1.2); 
+                    // Offset locale rispetto alla telecamera: -0.5m Sinistra, -0.2m Basso, -0.7m Avanti
+                    // Questo posiziona il punto di vista del giocatore "a ore 4" rispetto al gancio
+                    let offset = new THREE.Vector3(-0.5, -0.2, -0.7); 
                     offset.applyQuaternion(this.cameraEl.object3D.quaternion); 
                     
                     let desiredTarget = this.camWorldPos.clone().add(offset);
@@ -682,7 +601,7 @@
             <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; repeat: 1 1"></a-plane>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
-            <!-- PIATTAFORME DI ATTERRAGGIO (Con "H" dinamica) -->
+            <!-- PIATTAFORME DI ATTERRAGGIO -->
             <a-entity id="drop-zone" position="6.48 0 0">
                 <a-cylinder position="0 0.25 0" radius="0.75" height="0.5" color="#1976D2"></a-cylinder>
                 <a-ring position="0 0.501 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFEB3B"></a-ring>
@@ -752,13 +671,10 @@
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
+                            <!-- GANCIO -->
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
                                 <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
-                                
-                                <a-entity id="pip-cam-rig">
-                                    <a-entity pip-camera="monitor: #hook-monitor"></a-entity>
-                                </a-entity>
                             </a-entity>
 
                         </a-entity>
@@ -766,13 +682,11 @@
                 </a-entity>
             </a-entity>
 
-            <!-- CONSOLLE SCHERMI -->
+            <!-- CONSOLLE SCHERMI CENTRATA (Senza monitor secondario) -->
             <a-entity id="central-dashboard" position="0 7.5 -2.0" rotation="20 0 0">
-                
-                <a-entity id="menu-panel" position="-2.2 0 0" visible="true">
+                <a-entity id="menu-panel" position="0 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                    <!-- FIX HUD: TRASLATO VERSO L'ALTO PER FAR RIENTRARE TUTTO (+1.2m) -->
                     <a-text value="Speed" position="-1.5 1.3 0.05" align="left" width="5.5" color="#000000"></a-text>
                     <a-plane id="btn-speed-dec" class="clickable" position="-0.05 1.3 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
@@ -818,16 +732,8 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v20.1.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v21.0.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
-
-                <a-entity id="monitor-panel" position="2.2 0 0">
-                    <a-box position="0 0 -0.05" width="4.2" height="6.4" depth="0.1" color="#222"></a-box>
-                    <a-text value="HOOK CAM" position="0 2.6 0.02" align="center" width="7" color="#FFEB3B"></a-text>
-                    <a-text value="LIVE FEED" position="0 2.2 0.02" align="center" width="3.5" color="#FF0000"></a-text>
-                    <a-plane id="hook-monitor" position="0 -0.3 0.01" width="3.8" height="4.8" color="#111"></a-plane>
-                </a-entity>
-
             </a-entity>
 
         </a-entity>

@@ -645,8 +645,11 @@
                                 <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                             </a-entity>
 
-                            <!-- COCKPIT CAMERA (Ruotata di 180° rispetto alla precedente: -20 -90 0) QUI-->
-                            <a-camera id="cockpit-camera" position="0.0 0.0 0.0" rotation="0 0 0" active="false" wasd-controls-enabled="false" look-controls="enabled: false"></a-camera>
+                            <!-- CONTENITORE DELLA COCKPIT CAM (Spostiamo e ruotiamo questo!) -->
+<a-entity id="cockpit-rig" position="0.35 0.1 -0.15" rotation="0 180 0">
+    <!-- Fotocamera pulita con offset zero -->
+    <a-camera id="cockpit-camera" position="0 0 0" rotation="0 0 0" active="false" wasd-controls-enabled="false" look-controls="enabled: false"></a-camera>
+</a-entity>
 
                         </a-entity>
                     </a-entity>

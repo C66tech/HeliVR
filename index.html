@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V25.0.0 (Native Cockpit Cam)</title>
+    <title>VertiVR Simulator - V25.1.0 (Cockpit Cam Rotated 180)</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE COLORI VIVIDI
@@ -42,10 +42,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 25.0.0 - NATIVE COCKPIT CAM SWITCH)
+        // LOGICA DI VOLO E FISICA (V 25.1.0 - COCKPIT CAM 180° FIX)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "25.0.0"; 
+                this.version = "25.1.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -213,7 +213,6 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // SWITCH PULITO TRA MAIN CAMERA E COCKPIT CAMERA (TASTO X)
                 this.toggleCockpit = () => {
                     this.isCockpitActive = !this.isCockpitActive;
                     if (this.isCockpitActive) {
@@ -646,8 +645,8 @@
                                 <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                             </a-entity>
 
-                            <!-- COCKPIT CAMERA (Montata fisicamente all'interno della cabina del Vertibird) -->
-                            <a-camera id="cockpit-camera" position="0.35 0.1 -0.15" rotation="-20 90 0" active="false" wasd-controls-enabled="false" look-controls="enabled: false"></a-camera>
+                            <!-- COCKPIT CAMERA (Ruotata di 180° rispetto alla precedente: -20 -90 0) QUI-->
+                            <a-camera id="cockpit-camera" position="0.35 0.1 -0.35" rotation="-20 -90 0" active="false" wasd-controls-enabled="false" look-controls="enabled: false"></a-camera>
 
                         </a-entity>
                     </a-entity>
@@ -704,7 +703,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v25.0.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v25.1.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

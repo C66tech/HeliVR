@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V22.1.0</title>
+    <title>VertiVR Simulator - V23.0.0 (GoPro Zoom Lock)</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE COLORI VIVIDI
@@ -42,10 +42,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 22.1.0 - FIX APPOGGIO CASSE + ZOOM TWEAKS)
+        // LOGICA DI VOLO E FISICA (V 23.0.0 - GOPRO ZOOM LOCK)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "22.1.0"; 
+                this.version = "23.0.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -65,6 +65,7 @@
                 this.gameLevel = 1; 
                 
                 this.zoomOrbitAngle = 0; 
+                this.zoomStartHeliAngle = 0; // Traccia l'angolazione iniziale del verti al momento dello zoom
 
                 // Allocazioni vettori
                 this.dragP = new THREE.Vector3();
@@ -141,7 +142,7 @@
                     }
                 }
 
-                // FIX: Rimosso +0.2, ora il pivot della cassa combacia esattamente con l'altezza della piazzola
+                // FIX DEFINITIVO: Rimosso completamente il +0.2 anche qui, ora le casse appoggiano millimetricamente
                 for(let i=0; i<3; i++) {
                     let crate = selectedCrates[i];
                     let pad = selectedPads[i];
@@ -222,12 +223,16 @@
                     this.isZoomed = !this.isZoomed;
                     if (this.isZoomed) {
                         this.zoomOrbitAngle = 0; 
+                        // Salviamo l'angolazione esatta dell'elicottero in questo momento per agganciarci la telecamera
+                        this.zoomStartHeliAngle = this.angle; 
+                        
                         this.prevScale = this.currentScale;
                         this.prevPos.copy(this.worldRoot.object3D.position);
                         this.prevQuat.copy(this.worldRoot.object3D.quaternion);
                         this.currentScale = this.prevScale * 3.5; 
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                     } else {
+                        // All'uscita dallo zoom ripristina esattamente il mondo com'era, l'elicottero continuerà il suo volo normalmente
                         this.currentScale = this.prevScale;
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                         this.worldRoot.object3D.position.copy(this.prevPos);
@@ -311,7 +316,7 @@
                 if (Math.abs(leftStickX) < 0.15) leftStickX = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // TWEAK: Deadzone aumentata a 0.20 per prevenire auto-rotazioni indesiderate (drift)
+                // Spostamento orbitale manuale SOLO se il giocatore lo vuole
                 if (Math.abs(leftStickX) > 0.20 && this.isZoomed) {
                     this.zoomOrbitAngle += leftStickX * 90.0 * dt; 
                 }
@@ -495,7 +500,6 @@
                         if (this.attachedCrate) {
                             if (canDrop) {
                                 this.worldRoot.object3D.add(this.attachedCrate.object3D);
-                                // FIX: Rimossa aggiunta 0.2 anche qui
                                 this.attachedCrate.object3D.position.set(this.hookL.x, targetDropHeight, this.hookL.z); 
                                 this.attachedCrate.object3D.rotation.set(0, 0, 0);
                                 this.attachedCrate = null;
@@ -523,7 +527,6 @@
                             }
                         }
 
-                        // FIX: Rimossa aggiunta 0.2 per la gravità
                         let crateRestY = targetFloorY; 
                         if (crate.object3D.position.y > crateRestY) {
                             crate.object3D.position.y -= dt * 3.0; 
@@ -535,16 +538,25 @@
                     });
                 }
 
+                // GESTIONE ZOOM (Effetto GOPRO: Ancorato al muso, punta il gancio)
                 if (this.isZoomed && this.hookMagnet && this.cameraEl) {
                     
-                    let orbitQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.zoomOrbitAngle * Math.PI / 180);
+                    // 1. Calcoliamo la differenza di rotazione del Verti da quando hai attivato lo zoom
+                    let heliDelta = this.angle - this.zoomStartHeliAngle;
+                    
+                    // 2. Facciamo ruotare il MONDON al contrario (-heliDelta) per annullare il movimento dell'elicottero a schermo
+                    // Aggiungiamo anche il controllo manuale (zoomOrbitAngle)
+                    let totalOrbit = this.zoomOrbitAngle - heliDelta; 
+                    
+                    let orbitQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), totalOrbit * Math.PI / 180);
                     this.worldRoot.object3D.quaternion.copy(orbitQuat).multiply(this.prevQuat);
                     this.worldRoot.object3D.updateMatrixWorld(true);
 
+                    // 3. Spostiamo il mondo in modo che il gancio finisca esattamente davanti al visore
                     this.hookMagnet.object3D.getWorldPosition(this.targetWorldPos);
                     this.cameraEl.object3D.getWorldPosition(this.camWorldPos);
                     
-                    // TWEAK: Raggio a 0.30m (quindi Diametro percorso = 60cm)
+                    // Gancio a 30cm dal viso e 5cm in basso (Diametro di 60cm della circonferenza orbitale)
                     let offset = new THREE.Vector3(0, -0.05, -0.30); 
                     offset.applyQuaternion(this.cameraEl.object3D.quaternion); 
                     
@@ -736,7 +748,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v22.1.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v23.0.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

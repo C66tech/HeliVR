@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - Sfida 1</title>
+    <title>VertiVR Simulator - V20.0.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE PER LA TELECAMERA SECONDARIA (CON FIX ANTI-CRASH)
@@ -21,7 +21,6 @@
                 this.materialAssigned = false;
                 this.targetPos = new THREE.Vector3();
                 
-                // FIX FREEZE: Sospende il render del monitor durante ingresso/uscita dalla VR
                 this.isTransitioning = false;
                 this.el.sceneEl.addEventListener('enter-vr', () => {
                     this.isTransitioning = true;
@@ -34,6 +33,7 @@
             },
             tick: function () {
                 if (this.isTransitioning) return;
+
                 const renderer = this.el.sceneEl.renderer;
                 const scene = this.el.sceneEl.object3D;
                 if (!renderer || !scene) return;
@@ -55,6 +55,7 @@
                 
                 const currentXrEnabled = renderer.xr.enabled;
                 const currentRenderTarget = renderer.getRenderTarget();
+                
                 if (currentXrEnabled) renderer.xr.enabled = false;
                 
                 renderer.setRenderTarget(this.renderTarget);
@@ -62,6 +63,7 @@
                 renderer.render(scene, this.camera);
                 
                 renderer.setRenderTarget(currentRenderTarget);
+                
                 if (currentXrEnabled) renderer.xr.enabled = true;
             }
         });
@@ -99,11 +101,12 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 19.0.0 - SFIDA 1, DROP CONSTRAINT, HUD COMPLETO + LEVEL)
+        // LOGICA DI VOLO E FISICA (V 20.0.0 - STABILE + PITAGORA)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "19.0.0"; 
+                this.version = "20.0.0"; 
                 this.angle = 0;        
+                
                 this.minHeliY = 0.75;  
                 this.heliY = 0.75;     
                 this.radius = 6.48;    
@@ -117,10 +120,11 @@
                 this.rotorAngle = 0;
                 this.currentAngularSpeed = 0; 
 
-                this.hookDifficulty = 1; 
-                this.gameLevel = 1; // Nuovo parametro di livello
+                this.hookToleranceLevel = 1; 
+                this.gameLevel = 1; 
                 this.camOrbitalAngle = 90; 
 
+                // Allocazioni vettori
                 this.dragP = new THREE.Vector3();
                 this.dragQ = new THREE.Quaternion();
                 this.dragS = new THREE.Vector3();
@@ -159,22 +163,30 @@
                 this.hookMagnet = document.querySelector('#hook-magnet');
                 this.pipCamRig = document.querySelector('#pip-cam-rig');
                 
+                this.platforms = [
+                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75, color: 'blue', dir: {x: 1, z: 0} },  
+                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75, color: 'purple', dir: {x: 0, z: 1} },   
+                    { el: document.querySelector('#plat-left'), height: 0.3, radius: 0.75, color: 'orange', dir: {x: -1, z: 0} },   
+                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75, color: 'green', dir: {x: 0, z: -1} }     
+                ];
+
+                // CORREZIONE PITAGORICA: ricalcola e posiziona le piazzole in base all'arco
+                this.platforms.forEach(plat => {
+                    let hHover = plat.height + 0.762;
+                    let dY = hHover - 0.85; 
+                    let trueR = Math.sqrt((this.radius * this.radius) - (dY * dY));
+                    plat.pos = { x: trueR * plat.dir.x, z: trueR * plat.dir.z };
+                    plat.el.setAttribute('position', `${plat.pos.x} 0 ${plat.pos.z}`);
+                });
+                
+                this.isAttached = false;
                 this.attachedCrate = null;
                 this.prevRightTrigger = false;
 
-                // Definizione e Posizioni Piazzole
-                this.platforms = [
-                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75, color: 'blue', pos: {x: 6.48, z: 0} },  
-                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75, color: 'purple', pos: {x: 0, z: 6.48} },   
-                    { el: document.querySelector('#plat-left'), height: 0.3, radius: 0.75, color: 'orange', pos: {x: -6.48, z: 0} },   
-                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75, color: 'green', pos: {x: 0, z: -6.48} }     
-                ];
-
-                // SETUP SFIDA 1: Posiziona a caso 3 casse su 3 piazzole con colori NON coincidenti
+                // SETUP SFIDA 1: Posiziona a caso 3 casse su 3 piazzole
                 let allCrates = Array.from(document.querySelectorAll('.cargo-crate'));
                 let shuffledPads = [...this.platforms].sort(() => 0.5 - Math.random());
                 let selectedPads = shuffledPads.slice(0, 3);
-                
                 let validSetup = false;
                 let selectedCrates = [];
                 
@@ -182,7 +194,6 @@
                     let tempCrates = [...allCrates].sort(() => 0.5 - Math.random());
                     selectedCrates = tempCrates.slice(0, 3);
                     validSetup = true;
-                    // Verifica che nessun colore coincida con la piazzola
                     for(let i=0; i<3; i++) {
                         if(selectedCrates[i].dataset.color === selectedPads[i].color) {
                             validSetup = false;
@@ -191,7 +202,6 @@
                     }
                 }
 
-                // Applica il posizionamento
                 for(let i=0; i<3; i++) {
                     let crate = selectedCrates[i];
                     let pad = selectedPads[i];
@@ -199,18 +209,16 @@
                     crate.setAttribute('visible', 'true');
                 }
                 
-                // Nascondi la quarta cassa
                 let unusedCrate = allCrates.find(c => !selectedCrates.includes(c));
                 if(unusedCrate) {
                     unusedCrate.setAttribute('visible', 'false');
                     unusedCrate.object3D.position.set(0, -10, 0);
                 }
 
-                // SETUP UI HUD
                 this.speedText = document.querySelector('#menu-speed-val');
                 this.windText = document.querySelector('#menu-wind-val');
                 this.inertiaText = document.querySelector('#menu-inertia-val');
-                this.diffText = document.querySelector('#menu-diff-val');
+                this.tolText = document.querySelector('#menu-tol-val');
                 this.levelText = document.querySelector('#menu-level-val');
                 this.versionText = document.querySelector('#menu-version-val');
 
@@ -223,7 +231,6 @@
                     this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, -0.27, Math.sin(rad) * 1.5);
                 }
 
-                // Audio Context
                 this.audioCtx = null;
                 this.oscillator = null;
                 this.gainNode = null;
@@ -311,7 +318,7 @@
                     if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
                     if (this.windText) this.windText.setAttribute('value', `${this.wobbleAmplitude.toFixed(0)}`);
                     if (this.inertiaText) this.inertiaText.setAttribute('value', `${this.inertiaValue.toFixed(0)}`);
-                    if (this.diffText) this.diffText.setAttribute('value', `Lv ${this.hookDifficulty}`);
+                    if (this.tolText) this.tolText.setAttribute('value', `Lv ${this.hookToleranceLevel}`);
                     if (this.levelText) this.levelText.setAttribute('value', `Lv ${this.gameLevel}`);
                     if (this.versionText) this.versionText.setAttribute('value', `v${this.version}`);
                 };
@@ -322,8 +329,8 @@
                 let btnWindInc = document.querySelector('#btn-wind-inc');
                 let btnInertiaDec = document.querySelector('#btn-inertia-dec');
                 let btnInertiaInc = document.querySelector('#btn-inertia-inc');
-                let btnDiffDec = document.querySelector('#btn-diff-dec');
-                let btnDiffInc = document.querySelector('#btn-diff-inc');
+                let btnTolDec = document.querySelector('#btn-tol-dec');
+                let btnTolInc = document.querySelector('#btn-tol-inc');
                 let btnLevelDec = document.querySelector('#btn-level-dec');
                 let btnLevelInc = document.querySelector('#btn-level-inc');
 
@@ -333,8 +340,12 @@
                 if (btnWindInc) btnWindInc.addEventListener('click', () => { this.wobbleAmplitude = Math.min(150, this.wobbleAmplitude + 10); this.updateMenuUI(); });
                 if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => { this.inertiaValue = Math.max(0, this.inertiaValue - 10); this.updateMenuUI(); });
                 if (btnInertiaInc) btnInertiaInc.addEventListener('click', () => { this.inertiaValue = Math.min(100, this.inertiaValue + 10); this.updateMenuUI(); });
-                if (btnDiffDec) btnDiffDec.addEventListener('click', () => { this.hookDifficulty = Math.max(1, this.hookDifficulty - 1); this.updateMenuUI(); });
-                if (btnDiffInc) btnDiffInc.addEventListener('click', () => { this.hookDifficulty = Math.min(5, this.hookDifficulty + 1); this.updateMenuUI(); });
+                
+                // Tolleranza: 10 Livelli
+                if (btnTolDec) btnTolDec.addEventListener('click', () => { this.hookToleranceLevel = Math.max(1, this.hookToleranceLevel - 1); this.updateMenuUI(); });
+                if (btnTolInc) btnTolInc.addEventListener('click', () => { this.hookToleranceLevel = Math.min(10, this.hookToleranceLevel + 1); this.updateMenuUI(); });
+                
+                // Livello
                 if (btnLevelDec) btnLevelDec.addEventListener('click', () => { this.gameLevel = Math.max(1, this.gameLevel - 1); this.updateMenuUI(); });
                 if (btnLevelInc) btnLevelInc.addEventListener('click', () => { this.gameLevel = Math.min(10, this.gameLevel + 1); this.updateMenuUI(); });
 
@@ -365,6 +376,7 @@
                 }
 
                 if (leftTrigger > 0.02) this.initAudio();
+
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (Math.abs(leftStickX) < 0.15) leftStickX = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
@@ -373,7 +385,8 @@
                     this.camOrbitalAngle += leftStickX * 120.0 * dt; 
                     if (this.pipCamRig) {
                         let rad = this.camOrbitalAngle * Math.PI / 180;
-                        this.pipCamRig.object3D.position.set(Math.cos(rad) * 1.5, -0.27, Math.sin(rad) * 1.5);
+                        let dist = 1.5;
+                        this.pipCamRig.object3D.position.set(Math.cos(rad) * dist, -0.27, Math.sin(rad) * dist);
                     }
                 }
 
@@ -407,6 +420,7 @@
                 this.currentStickY += (rightStickY - this.currentStickY) * dt * 6.0;
 
                 let activeMinY = 0.25; 
+                
                 if (this.heliWrapperEl) {
                     this.heliWrapperEl.object3D.getWorldPosition(this.heliL);
                     this.worldRoot.object3D.worldToLocal(this.heliL);
@@ -488,7 +502,6 @@
                     if (this.rotorEl) this.rotorEl.setAttribute('rotation', `0 ${this.rotorAngle % 360} 0`);
                 }
 
-                // GESTIONE CALAMITE MULTIPLE, DROP CONSTRAINT E FEEDBACK COLORI
                 if (this.hookMagnet && this.hookArea) {
                     
                     this.hookMagnet.object3D.getWorldPosition(this.hookL);
@@ -516,17 +529,16 @@
 
                     let activeObjMagnet = closestCrate ? closestCrate.querySelector('.object-magnet') : null;
                     
-                    const tolerances = [0.03, 0.02, 0.015, 0.01, 0.005];
-                    let canGrab = !this.attachedCrate && closestCrate && (minDist < tolerances[this.hookDifficulty - 1]);
+                    // TOLLERANZA: 10 Livelli, da 0.06m a scalare di 0.005m
+                    let maxAllowedDist = 0.06 - ((this.hookToleranceLevel - 1) * 0.005);
+                    let canGrab = !this.attachedCrate && closestCrate && (minDist < maxAllowedDist); 
 
                     let canDrop = false;
                     let targetDropHeight = 0;
-                    
-                    // Verifica condizioni di sgancio: Sopra una piazzola + Altezza sufficientemente bassa
+
                     for (let plat of this.platforms) {
                         let distH = Math.hypot(this.hookL.x - plat.pos.x, this.hookL.z - plat.pos.z);
                         if (distH < plat.radius) {
-                            // Altezza massima di sgancio consentita
                             if (this.hookL.y >= plat.height && this.hookL.y <= (plat.height + 0.8)) {
                                 canDrop = true;
                                 targetDropHeight = plat.height;
@@ -535,7 +547,7 @@
                         }
                     }
 
-                    // Reset Colori base (Verde)
+                    // Ripristino del colore neutro per le casse lontane
                     allCrates.forEach(c => {
                         let mag = c.querySelector('.object-magnet');
                         if (mag && mag !== activeObjMagnet) mag.setAttribute('color', '#4CAF50');
@@ -543,25 +555,25 @@
 
                     if (this.attachedCrate) {
                         if (canDrop) {
-                            this.hookMagnet.setAttribute('color', '#FFFF00'); // GIALLO: Sgancio Autorizzato
+                            this.hookMagnet.setAttribute('color', '#FFFF00'); 
                             if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#FFFF00');
                         } else {
-                            this.hookMagnet.setAttribute('color', '#4CAF50'); // Verde: in volo/sgancio non autorizzato
+                            this.hookMagnet.setAttribute('color', '#4CAF50'); 
                             if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#4CAF50');
                         }
                     } else if (canGrab) {
-                        this.hookMagnet.setAttribute('color', '#FF0000'); // ROSSO: Pronto all'aggancio
+                        this.hookMagnet.setAttribute('color', '#FF0000'); 
                         if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#FF0000');
                     } else {
-                        this.hookMagnet.setAttribute('color', '#4CAF50'); // Verde
+                        this.hookMagnet.setAttribute('color', '#4CAF50'); 
                     }
 
-                    // Logica di aggancio / Sgancio Vincolato
                     let triggerPressed = rightTrigger > 0.5;
                     if (triggerPressed && !this.prevRightTrigger) {
                         if (this.attachedCrate) {
                             if (canDrop) {
                                 this.worldRoot.object3D.add(this.attachedCrate.object3D);
+                                // Allinea posizione (mantenendo la x,z del gancio) e appoggia in base alla piazzola
                                 this.attachedCrate.object3D.position.set(this.hookL.x, targetDropHeight + 0.2, this.hookL.z); 
                                 this.attachedCrate.object3D.rotation.set(0, 0, 0);
                                 this.attachedCrate = null;
@@ -575,7 +587,6 @@
                     }
                     this.prevRightTrigger = triggerPressed;
 
-                    // Gravità per le casse non agganciate 
                     allCrates.forEach(crate => {
                         if (crate === this.attachedCrate || crate.getAttribute('visible') === 'false' || crate.getAttribute('visible') === false) return;
                         
@@ -594,8 +605,8 @@
                         if (crate.object3D.position.y > crateRestY) {
                             crate.object3D.position.y -= dt * 3.0; 
                             if (crate.object3D.position.y <= crateRestY) {
-                                crate.object3D.position.y = crateRestY;
-                                crate.object3D.rotation.set(0,0,0);
+                                crate.object3D.position.y = crateRestY; 
+                                crate.object3D.rotation.set(0, 0, 0);
                             }
                         }
                     });
@@ -651,9 +662,7 @@
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
             <img id="frontalino-img" src="frontalino.jpg" crossorigin="anonymous">
             <img id="sfondo-img" src="sfondo.png" crossorigin="anonymous">
-            <!-- Nuova Texture per la cassa -->
             <img id="cassa-img" src="cassa.jpg" crossorigin="anonymous">
-            
             <a-asset-item id="verti-model" src="VertilowRed.glb"></a-asset-item>
         </a-assets>
 
@@ -671,7 +680,7 @@
             <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; repeat: 1 1"></a-plane>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
-            <!-- PIAZZOLE DI ATTERRAGGIO (Con la "H") -->
+            <!-- PIATTAFORME DI ATTERRAGGIO (Con "H" dinamica) -->
             <a-entity id="drop-zone" position="6.48 0 0">
                 <a-cylinder position="0 0.25 0" radius="0.75" height="0.5" color="#1976D2"></a-cylinder>
                 <a-ring position="0 0.501 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFEB3B"></a-ring>
@@ -696,30 +705,26 @@
                 <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
             </a-entity>
 
-            <!-- LE 4 CASSE (Calamite incrementate del 15% -> radius="0.046") -->
+            <!-- LE 4 CASSE -->
             <a-entity id="crates-container">
-                <!-- Cassa BLU -->
                 <a-entity class="cargo-crate" data-color="blue" position="0 -10 0">
                     <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
                     <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#1976D2" material="shader: flat"></a-plane>
                     <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
                     <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                 </a-entity>
-                <!-- Cassa VIOLA -->
                 <a-entity class="cargo-crate" data-color="purple" position="0 -10 0">
                     <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
                     <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#9C27B0" material="shader: flat"></a-plane>
                     <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
                     <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                 </a-entity>
-                <!-- Cassa ARANCIONE -->
                 <a-entity class="cargo-crate" data-color="orange" position="0 -10 0">
                     <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
                     <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#FF9800" material="shader: flat"></a-plane>
                     <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
                     <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
                 </a-entity>
-                <!-- Cassa VERDE -->
                 <a-entity class="cargo-crate" data-color="green" position="0 -10 0">
                     <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
                     <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#4CAF50" material="shader: flat"></a-plane>
@@ -745,7 +750,7 @@
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
-                            <!-- GANCIO: ASTA ALLUNGATA E CALAMITA INCREMENTATA DEL 15% (0.046m) -->
+                            <!-- GANCIO CON MAGNETE MAGGIORATO 15% -->
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
                                 <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
@@ -760,13 +765,12 @@
                 </a-entity>
             </a-entity>
 
-            <!-- CONSOLLE SCHERMI RIALZATA AL CENTRO -->
+            <!-- CONSOLLE SCHERMI -->
             <a-entity id="central-dashboard" position="0 7.5 -2.0" rotation="20 0 0">
                 
                 <a-entity id="menu-panel" position="-2.2 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                    <!-- RIPRISTINO HUD COMPLETO + LEVEL -->
                     <a-text value="Speed" position="-1.5 0.1 0.05" align="left" width="5.5" color="#000000"></a-text>
                     <a-plane id="btn-speed-dec" class="clickable" position="-0.05 0.1 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
@@ -794,12 +798,12 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text value="Precision" position="-1.5 -2.0 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-diff-dec" class="clickable" position="-0.05 -2.0 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="Tolerance" position="-1.5 -2.0 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-tol-dec" class="clickable" position="-0.05 -2.0 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-diff-val" value="Lv 1" position="0.6 -2.0 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-diff-inc" class="clickable" position="1.35 -2.0 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-tol-val" value="Lv 1" position="0.6 -2.0 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-tol-inc" class="clickable" position="1.35 -2.0 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
@@ -812,7 +816,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v19.0.0 - Sfida 1" position="0 -3.2 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v20.0.0" position="0 -3.2 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
 
                 <a-entity id="monitor-panel" position="2.2 0 0">

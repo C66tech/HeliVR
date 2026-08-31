@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V22.0.0 (Orbital Zoom)</title>
+    <title>VertiVR Simulator - V22.1.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE COLORI VIVIDI
@@ -42,10 +42,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA (V 22.0.0 - ORBITAL ZOOM)
+        // LOGICA DI VOLO E FISICA (V 22.1.0 - FIX APPOGGIO CASSE + ZOOM TWEAKS)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "22.0.0"; 
+                this.version = "22.1.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -64,7 +64,6 @@
                 this.hookToleranceLevel = 1; 
                 this.gameLevel = 1; 
                 
-                // Variabile per la rotazione dell'orbita attorno al gancio
                 this.zoomOrbitAngle = 0; 
 
                 // Allocazioni vettori
@@ -142,10 +141,11 @@
                     }
                 }
 
+                // FIX: Rimosso +0.2, ora il pivot della cassa combacia esattamente con l'altezza della piazzola
                 for(let i=0; i<3; i++) {
                     let crate = selectedCrates[i];
                     let pad = selectedPads[i];
-                    crate.object3D.position.set(pad.pos.x, pad.height + 0.2, pad.pos.z);
+                    crate.object3D.position.set(pad.pos.x, pad.height, pad.pos.z); 
                     crate.setAttribute('visible', 'true');
                 }
                 
@@ -218,18 +218,16 @@
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
-                // LOGICA ZOOM CON RITORNO ALLO STATO ESATTO PRECEDENTE
                 this.toggleZoom = () => {
                     this.isZoomed = !this.isZoomed;
                     if (this.isZoomed) {
-                        this.zoomOrbitAngle = 0; // Resetta l'angolo di orbita
+                        this.zoomOrbitAngle = 0; 
                         this.prevScale = this.currentScale;
                         this.prevPos.copy(this.worldRoot.object3D.position);
                         this.prevQuat.copy(this.worldRoot.object3D.quaternion);
                         this.currentScale = this.prevScale * 3.5; 
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                     } else {
-                        // Quando esce, ripristina il mondo ESATTAMENTE dove e come era prima
                         this.currentScale = this.prevScale;
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                         this.worldRoot.object3D.position.copy(this.prevPos);
@@ -313,8 +311,8 @@
                 if (Math.abs(leftStickX) < 0.15) leftStickX = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // Rotazione orbitale con il controller sinistro (SOLO quando lo zoom è attivo)
-                if (Math.abs(leftStickX) > 0.15 && this.isZoomed) {
+                // TWEAK: Deadzone aumentata a 0.20 per prevenire auto-rotazioni indesiderate (drift)
+                if (Math.abs(leftStickX) > 0.20 && this.isZoomed) {
                     this.zoomOrbitAngle += leftStickX * 90.0 * dt; 
                 }
 
@@ -497,7 +495,8 @@
                         if (this.attachedCrate) {
                             if (canDrop) {
                                 this.worldRoot.object3D.add(this.attachedCrate.object3D);
-                                this.attachedCrate.object3D.position.set(this.hookL.x, targetDropHeight + 0.2, this.hookL.z); 
+                                // FIX: Rimossa aggiunta 0.2 anche qui
+                                this.attachedCrate.object3D.position.set(this.hookL.x, targetDropHeight, this.hookL.z); 
                                 this.attachedCrate.object3D.rotation.set(0, 0, 0);
                                 this.attachedCrate = null;
                             }
@@ -524,7 +523,8 @@
                             }
                         }
 
-                        let crateRestY = targetFloorY + 0.2; 
+                        // FIX: Rimossa aggiunta 0.2 per la gravità
+                        let crateRestY = targetFloorY; 
                         if (crate.object3D.position.y > crateRestY) {
                             crate.object3D.position.y -= dt * 3.0; 
                             if (crate.object3D.position.y <= crateRestY) {
@@ -535,23 +535,19 @@
                     });
                 }
 
-                // ESECUZIONE ORBITA: Ruota il mondo attorno al gancio senza toccare la telecamera
                 if (this.isZoomed && this.hookMagnet && this.cameraEl) {
                     
-                    // 1. Applica la rotazione orbitale orizzontale (Y) alla rotazione originaria del diorama
                     let orbitQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.zoomOrbitAngle * Math.PI / 180);
                     this.worldRoot.object3D.quaternion.copy(orbitQuat).multiply(this.prevQuat);
                     this.worldRoot.object3D.updateMatrixWorld(true);
 
-                    // 2. Calcola le nuove posizioni del gancio e della telecamera
                     this.hookMagnet.object3D.getWorldPosition(this.targetWorldPos);
                     this.cameraEl.object3D.getWorldPosition(this.camWorldPos);
                     
-                    // 3. Offset di sicurezza per la telecamera (25cm di distanza, 5cm in basso) bloccato davanti al viso
-                    let offset = new THREE.Vector3(0, -0.05, -0.25); 
+                    // TWEAK: Raggio a 0.30m (quindi Diametro percorso = 60cm)
+                    let offset = new THREE.Vector3(0, -0.05, -0.30); 
                     offset.applyQuaternion(this.cameraEl.object3D.quaternion); 
                     
-                    // 4. Trasla l'intero diorama affinché il gancio si posizioni esattamente in quello spot
                     let desiredTarget = this.camWorldPos.clone().add(offset);
                     let shift = desiredTarget.sub(this.targetWorldPos);
                     this.worldRoot.object3D.position.add(shift);
@@ -681,7 +677,6 @@
                                 <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
                             </a-entity>
 
-                            <!-- GANCIO -->
                             <a-entity id="hook-area" position="0 0 0">
                                 <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
                                 <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
@@ -741,7 +736,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v22.0.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v22.1.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

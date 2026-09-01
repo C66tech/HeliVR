@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V25.2.0 (Mission & HUD)</title>
+    <title>VertiVR Simulator - V25.3.0 (Dynamic Landing Pad)</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE COLORI VIVIDI
@@ -45,7 +45,7 @@
         // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "25.2.0"; 
+                this.version = "25.3.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -150,10 +150,16 @@
                     unusedCrate.object3D.position.set(0, -10, 0);
                 }
 
-                // IDENTIFICA LA PIATTAFORMA LIBERA E IMPOSTA IL VERTIBIRD
-                this.emptyPad = this.platforms.find(p => !selectedPads.includes(p));
-                this.angle = Math.atan2(-this.emptyPad.dir.z, this.emptyPad.dir.x) * (180 / Math.PI);
-                this.heliY = this.emptyPad.height + 0.25;
+                // IDENTIFICA LA PIATTAFORMA DI PARTENZA (INIZIALMENTE LIBERA)
+                this.startPad = this.platforms.find(p => !selectedPads.includes(p));
+                
+                // SCEGLIETTEMO UNA PIATTAFORMA DI ARRIVO FINALE DIFFERENTE TRA QUELLA OCCUPATA DALLE CASSE
+                let availableTargetPads = this.platforms.filter(p => p !== this.startPad);
+                this.targetLandingPad = availableTargetPads[Math.floor(Math.random() * availableTargetPads.length)];
+
+                // POSIZIONAMENTO INIZIALE DEL VERTIBIRD SULLA PIATTAFORMA DI PARTENZA
+                this.angle = Math.atan2(-this.startPad.dir.z, this.startPad.dir.x) * (180 / Math.PI);
+                this.heliY = this.startPad.height + 0.25;
 
                 // VARIABILI MISSIONE E TIMER
                 this.statusTextEl = document.querySelector('#game-status-text');
@@ -536,7 +542,7 @@
                     });
                 }
 
-                // CONTROLLO VITTORIA E AGGIORNAMENTO HUD
+                // CONTROLLO VITTORIA E AGGIORNAMENTO HUD SULLA NUOVA PIATTAFORMA DI ARRIVO
                 let matched = 0;
                 allCrates.forEach(crate => {
                     if (crate.getAttribute('visible') === 'false' || crate.getAttribute('visible') === false) return;
@@ -558,8 +564,8 @@
                 this.matchedCrates = matched;
 
                 if (this.matchedCrates === 3 && this.timerRunning && !isAirborne) {
-                    let distToEmpty = Math.hypot(this.heliL.x - this.emptyPad.pos.x, this.heliL.z - this.emptyPad.pos.z);
-                    if (distToEmpty < this.emptyPad.radius) {
+                    let distToTarget = Math.hypot(this.heliL.x - this.targetLandingPad.pos.x, this.heliL.z - this.targetLandingPad.pos.z);
+                    if (distToTarget < this.targetLandingPad.radius) {
                         this.timerRunning = false;
                     }
                 }
@@ -772,7 +778,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v25.2.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v25.3.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

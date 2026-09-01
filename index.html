@@ -6,9 +6,23 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V25.3.0 (Dynamic Landing Pad)</title>
+    <title>VertiVR Simulator - V25.6.0 (Background Flipped UV)</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
+        // COMPONENTE PER FLIPPARE UV ORIZZONTALMENTE SULLE MESH
+        AFRAME.registerComponent('flip-uv-x', {
+            init: function () {
+                this.el.addEventListener('materialtextureloaded', () => {
+                    const mesh = this.el.getObject3D('mesh');
+                    if (mesh && mesh.material && mesh.material.map) {
+                        mesh.material.map.repeat.x = -1;
+                        mesh.material.map.wrapS = THREE.RepeatWrapping;
+                        mesh.material.map.needsUpdate = true;
+                    }
+                });
+            }
+        });
+
         // COMPONENTE COLORI VIVIDI
         AFRAME.registerComponent('make-vivid', {
             init: function () {
@@ -45,7 +59,7 @@
         // LOGICA DI VOLO E FISICA
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "25.3.0"; 
+                this.version = "25.6.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -150,18 +164,12 @@
                     unusedCrate.object3D.position.set(0, -10, 0);
                 }
 
-                // IDENTIFICA LA PIATTAFORMA DI PARTENZA (INIZIALMENTE LIBERA)
                 this.startPad = this.platforms.find(p => !selectedPads.includes(p));
-                
-                // SCEGLIETTEMO UNA PIATTAFORMA DI ARRIVO FINALE DIFFERENTE TRA QUELLA OCCUPATA DALLE CASSE
-                let availableTargetPads = this.platforms.filter(p => p !== this.startPad);
-                this.targetLandingPad = availableTargetPads[Math.floor(Math.random() * availableTargetPads.length)];
+                this.finalLandingPad = this.platforms.find(p => p.color === unusedCrate.dataset.color);
 
-                // POSIZIONAMENTO INIZIALE DEL VERTIBIRD SULLA PIATTAFORMA DI PARTENZA
                 this.angle = Math.atan2(-this.startPad.dir.z, this.startPad.dir.x) * (180 / Math.PI);
                 this.heliY = this.startPad.height + 0.25;
 
-                // VARIABILI MISSIONE E TIMER
                 this.statusTextEl = document.querySelector('#game-status-text');
                 this.timerStarted = false;
                 this.timerRunning = false;
@@ -366,7 +374,6 @@
                 let wobbleThrottleOffset = 0;
                 let wobbleStickOffset = 0;
 
-                // GESTIONE TIMER E PARTENZA
                 if (!this.timerStarted && isAirborne) {
                     this.timerStarted = true;
                     this.timerRunning = true;
@@ -542,7 +549,6 @@
                     });
                 }
 
-                // CONTROLLO VITTORIA E AGGIORNAMENTO HUD SULLA NUOVA PIATTAFORMA DI ARRIVO
                 let matched = 0;
                 allCrates.forEach(crate => {
                     if (crate.getAttribute('visible') === 'false' || crate.getAttribute('visible') === false) return;
@@ -564,8 +570,8 @@
                 this.matchedCrates = matched;
 
                 if (this.matchedCrates === 3 && this.timerRunning && !isAirborne) {
-                    let distToTarget = Math.hypot(this.heliL.x - this.targetLandingPad.pos.x, this.heliL.z - this.targetLandingPad.pos.z);
-                    if (distToTarget < this.targetLandingPad.radius) {
+                    let distToTarget = Math.hypot(this.heliL.x - this.finalLandingPad.pos.x, this.heliL.z - this.finalLandingPad.pos.z);
+                    if (distToTarget < this.finalLandingPad.radius) {
                         this.timerRunning = false;
                     }
                 }
@@ -632,9 +638,11 @@
 
         <a-entity id="world-root" position="0 0.8 -0.8" rotation="0 0 0" scale="0.06 0.06 0.06">
             
-            <a-cylinder position="0 -0.05 0" radius="8.4" height="0.1" material="src: #terrain-img; color: #B0E0E6; transparent: true; opacity: 0.3; roughness: 0.8" texture-fallback></a-cylinder>
+            <!-- BASE ROTONDA CON TEXTURE TERRENO E FALLBACK -->
+            <a-cylinder position="0 -0.05 0" radius="8.4" height="0.1" material="src: #terrain-img; shader: flat; repeat: 1 1" texture-fallback></a-cylinder>
 
-            <a-cylinder position="0 2.5 0" radius="8.4" height="5" open-ended="true" theta-start="-108" theta-length="216" rotation="0 180 0" material="src: #sfondo-img; side: double; transparent: true; opacity: 0.9; shader: flat"></a-cylinder>
+            <!-- SFONDO CILINDRICO CON UV FLIPPATE ORIZZONTALMENTE PER LEGGIBILITÀ DEL TESTO -->
+            <a-cylinder position="0 2.5 0" radius="8.4" height="5" open-ended="true" theta-start="-108" theta-length="216" rotation="0 180 0" material="src: #sfondo-img; side: double; transparent: true; opacity: 0.9; shader: flat" flip-uv-x></a-cylinder>
 
             <!-- STRUTTURA CENTRALE -->
             <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#FFFFFF"></a-box>
@@ -778,7 +786,7 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text id="menu-version-val" value="v25.3.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v25.6.0" position="0 -2.3 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

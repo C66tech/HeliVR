@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>Whirlybird VR - V25.9.0</title>
+    <title>Whirlybird VR - V25.10.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE PER FLIPPARE UV ORIZZONTALMENTE SULLE MESH
@@ -59,7 +59,7 @@
         // LOGICA DI VOLO E FISICA (WHIRLYBIRD VR)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "25.9.0"; 
+                this.version = "25.10.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -263,9 +263,14 @@
                 this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.04));
                 this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.04));
 
+                // CAMBIO Sfondo DINAMICO IMMEDIATO
                 this.updateLevelBackground = () => {
                     if (this.bgCylinder) {
-                        this.bgCylinder.setAttribute('material', 'src', `sfondo${this.gameLevel}.png`);
+                        let newSrc = `sfondo${this.gameLevel}.png`;
+                        this.bgCylinder.setAttribute('material', 'src', '');
+                        setTimeout(() => {
+                            this.bgCylinder.setAttribute('material', 'src', newSrc);
+                        }, 10);
                     }
                 };
 
@@ -292,6 +297,7 @@
                 if (btnWindInc) btnWindInc.addEventListener('click', () => { this.wobbleAmplitude = Math.min(150, this.wobbleAmplitude + 10); this.updateMenuUI(); });
                 if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => { this.inertiaValue = Math.max(0, this.inertiaValue - 10); this.updateMenuUI(); });
                 if (btnInertiaInc) btnInertiaInc.addEventListener('click', () => { this.inertiaValue = Math.min(100, this.inertiaValue + 10); this.updateMenuUI(); });
+                
                 if (btnLevelDec) btnLevelDec.addEventListener('click', () => { 
                     this.gameLevel = Math.max(1, this.gameLevel - 1); 
                     this.updateLevelBackground();
@@ -480,7 +486,6 @@
 
                     let activeObjMagnet = closestCrate ? closestCrate.querySelector('.object-magnet') : null;
                     
-                    // INTERSEZIONE RIDOTTA: Soglia di tolleranza diminuita per richiedere maggior precisione
                     let maxAllowedDist = 0.045; 
                     let canGrab = !this.attachedCrate && closestCrate && (minDist < maxAllowedDist); 
                     let canDrop = false;
@@ -505,7 +510,6 @@
                         }
                     });
 
-                    // MAGNETI GIALLI ESCLUSIVAMENTE DURANTE L'IDONEITÀ (SEMMISSIVA / GIALLO TEMPORANEO)
                     if (this.attachedCrate) {
                         if (canDrop) {
                             this.hookMagnet.setAttribute('color', '#FFFF00'); 
@@ -660,7 +664,6 @@
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
             <img id="frontalino-img" src="frontalino.jpg" crossorigin="anonymous">
-            <img id="sfondo-img" src="sfondo1.png" crossorigin="anonymous">
             <img id="cassa-img" src="cassa.jpg" crossorigin="anonymous">
             <a-asset-item id="verti-model" src="VertilowRed.glb"></a-asset-item>
         </a-assets>
@@ -674,7 +677,7 @@
             <a-cylinder position="0 -0.05 0" radius="8.4" height="0.1" material="src: #terrain-img; shader: flat; repeat: 1 1" texture-fallback></a-cylinder>
 
             <!-- SFONDO CILINDRICO DINAMICO PER LIVELLO CON UV FLIPPATE -->
-            <a-cylinder id="bg-cylinder" position="0 2.5 0" radius="8.4" height="5" open-ended="true" theta-start="-108" theta-length="216" rotation="0 180 0" material="src: #sfondo-img; side: double; transparent: true; opacity: 0.9; shader: flat" flip-uv-x></a-cylinder>
+            <a-cylinder id="bg-cylinder" position="0 2.5 0" radius="8.4" height="5" open-ended="true" theta-start="-108" theta-length="216" rotation="0 180 0" material="src: sfondo1.png; side: double; transparent: true; opacity: 0.9; shader: flat" flip-uv-x></a-cylinder>
 
             <!-- STRUTTURA CENTRALE -->
             <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#FFFFFF"></a-box>
@@ -811,7 +814,7 @@
                     <a-plane position="0 -1.8 0.02" width="3.2" height="1.4" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
                     <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
 
-                    <a-text id="menu-version-val" value="v25.9.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v25.10.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

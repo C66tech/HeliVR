@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
 
-    <title>VertiVR Simulator - V25.7.0 (HUD Layout & Trigger Start)</title>
+    <title>Whirlybird VR - V25.9.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // COMPONENTE PER FLIPPARE UV ORIZZONTALMENTE SULLE MESH
@@ -56,10 +56,10 @@
             }
         });
 
-        // LOGICA DI VOLO E FISICA
+        // LOGICA DI VOLO E FISICA (WHIRLYBIRD VR)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
-                this.version = "25.7.0"; 
+                this.version = "25.9.0"; 
                 this.angle = 0;        
                 
                 this.minHeliY = 0.75;  
@@ -75,8 +75,6 @@
                 this.rotorAngle = 0;
                 this.currentAngularSpeed = 0; 
 
-                // Impostazione predefinita al livello 10 per la massima facilità di presa
-                this.hookToleranceLevel = 10; 
                 this.gameLevel = 1; 
 
                 // Allocazioni vettori
@@ -107,6 +105,7 @@
 
                 this.hookArea = document.querySelector('#hook-area');
                 this.hookMagnet = document.querySelector('#hook-magnet');
+                this.bgCylinder = document.querySelector('#bg-cylinder');
                 
                 this.currentScale = 0.06; 
                 this.isDragging = false;
@@ -264,6 +263,12 @@
                 this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.04));
                 this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.04));
 
+                this.updateLevelBackground = () => {
+                    if (this.bgCylinder) {
+                        this.bgCylinder.setAttribute('material', 'src', `sfondo${this.gameLevel}.png`);
+                    }
+                };
+
                 this.updateMenuUI = () => {
                     if (this.speedText) this.speedText.setAttribute('value', `${this.speedMultiplier.toFixed(0)} deg/s`);
                     if (this.windText) this.windText.setAttribute('value', `${this.wobbleAmplitude.toFixed(0)}`);
@@ -287,9 +292,18 @@
                 if (btnWindInc) btnWindInc.addEventListener('click', () => { this.wobbleAmplitude = Math.min(150, this.wobbleAmplitude + 10); this.updateMenuUI(); });
                 if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => { this.inertiaValue = Math.max(0, this.inertiaValue - 10); this.updateMenuUI(); });
                 if (btnInertiaInc) btnInertiaInc.addEventListener('click', () => { this.inertiaValue = Math.min(100, this.inertiaValue + 10); this.updateMenuUI(); });
-                if (btnLevelDec) btnLevelDec.addEventListener('click', () => { this.gameLevel = Math.max(1, this.gameLevel - 1); this.updateMenuUI(); });
-                if (btnLevelInc) btnLevelInc.addEventListener('click', () => { this.gameLevel = Math.min(10, this.gameLevel + 1); this.updateMenuUI(); });
+                if (btnLevelDec) btnLevelDec.addEventListener('click', () => { 
+                    this.gameLevel = Math.max(1, this.gameLevel - 1); 
+                    this.updateLevelBackground();
+                    this.updateMenuUI(); 
+                });
+                if (btnLevelInc) btnLevelInc.addEventListener('click', () => { 
+                    this.gameLevel = Math.min(10, this.gameLevel + 1); 
+                    this.updateLevelBackground();
+                    this.updateMenuUI(); 
+                });
 
+                this.updateLevelBackground();
                 this.updateMenuUI();
             },
 
@@ -369,7 +383,6 @@
                 let wobbleThrottleOffset = 0;
                 let wobbleStickOffset = 0;
 
-                // PARTENZA TIMER: Solo quando il grilletto destro supera il 10% della corsa (0.10)
                 if (!this.timerStarted && rightTrigger > 0.10) {
                     this.timerStarted = true;
                     this.timerRunning = true;
@@ -466,7 +479,9 @@
                     }
 
                     let activeObjMagnet = closestCrate ? closestCrate.querySelector('.object-magnet') : null;
-                    let maxAllowedDist = 0.06 - ((this.hookToleranceLevel - 1) * 0.005);
+                    
+                    // INTERSEZIONE RIDOTTA: Soglia di tolleranza diminuita per richiedere maggior precisione
+                    let maxAllowedDist = 0.045; 
                     let canGrab = !this.attachedCrate && closestCrate && (minDist < maxAllowedDist); 
                     let canDrop = false;
                     let targetDropHeight = 0;
@@ -484,22 +499,43 @@
 
                     allCrates.forEach(c => {
                         let mag = c.querySelector('.object-magnet');
-                        if (mag && mag !== activeObjMagnet) mag.setAttribute('color', '#4CAF50');
+                        if (mag && mag !== activeObjMagnet) {
+                            mag.setAttribute('color', '#4CAF50');
+                            mag.setAttribute('material', 'emissive', '#4CAF50');
+                        }
                     });
 
+                    // MAGNETI GIALLI ESCLUSIVAMENTE DURANTE L'IDONEITÀ (SEMMISSIVA / GIALLO TEMPORANEO)
                     if (this.attachedCrate) {
                         if (canDrop) {
                             this.hookMagnet.setAttribute('color', '#FFFF00'); 
-                            if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#FFFF00');
+                            this.hookMagnet.setAttribute('material', 'emissive', '#FFFF00');
+                            if (activeObjMagnet) {
+                                activeObjMagnet.setAttribute('color', '#FFFF00');
+                                activeObjMagnet.setAttribute('material', 'emissive', '#FFFF00');
+                            }
                         } else {
                             this.hookMagnet.setAttribute('color', '#4CAF50'); 
-                            if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#4CAF50');
+                            this.hookMagnet.setAttribute('material', 'emissive', '#4CAF50');
+                            if (activeObjMagnet) {
+                                activeObjMagnet.setAttribute('color', '#4CAF50');
+                                activeObjMagnet.setAttribute('material', 'emissive', '#4CAF50');
+                            }
                         }
                     } else if (canGrab) {
-                        this.hookMagnet.setAttribute('color', '#FF0000'); 
-                        if (activeObjMagnet) activeObjMagnet.setAttribute('color', '#FF0000');
+                        this.hookMagnet.setAttribute('color', '#FFFF00'); 
+                        this.hookMagnet.setAttribute('material', 'emissive', '#FFFF00');
+                        if (activeObjMagnet) {
+                            activeObjMagnet.setAttribute('color', '#FFFF00');
+                            activeObjMagnet.setAttribute('material', 'emissive', '#FFFF00');
+                        }
                     } else {
                         this.hookMagnet.setAttribute('color', '#4CAF50'); 
+                        this.hookMagnet.setAttribute('material', 'emissive', '#4CAF50');
+                        if (activeObjMagnet) {
+                            activeObjMagnet.setAttribute('color', '#4CAF50');
+                            activeObjMagnet.setAttribute('material', 'emissive', '#4CAF50');
+                        }
                     }
 
                     let triggerPressed = rightTrigger > 0.5;
@@ -624,7 +660,7 @@
             <img id="terrain-img" src="terreno.jpg" crossorigin="anonymous">
             <img id="menu-bg" src="VertiVRMenu.jpg" crossorigin="anonymous">
             <img id="frontalino-img" src="frontalino.jpg" crossorigin="anonymous">
-            <img id="sfondo-img" src="sfondo.png" crossorigin="anonymous">
+            <img id="sfondo-img" src="sfondo1.png" crossorigin="anonymous">
             <img id="cassa-img" src="cassa.jpg" crossorigin="anonymous">
             <a-asset-item id="verti-model" src="VertilowRed.glb"></a-asset-item>
         </a-assets>
@@ -637,8 +673,8 @@
             <!-- BASE ROTONDA CON TEXTURE TERRENO E FALLBACK -->
             <a-cylinder position="0 -0.05 0" radius="8.4" height="0.1" material="src: #terrain-img; shader: flat; repeat: 1 1" texture-fallback></a-cylinder>
 
-            <!-- SFONDO CILINDRICO CON UV FLIPPATE ORIZZONTALMENTE PER LEGGIBILITÀ DEL TESTO -->
-            <a-cylinder position="0 2.5 0" radius="8.4" height="5" open-ended="true" theta-start="-108" theta-length="216" rotation="0 180 0" material="src: #sfondo-img; side: double; transparent: true; opacity: 0.9; shader: flat" flip-uv-x></a-cylinder>
+            <!-- SFONDO CILINDRICO DINAMICO PER LIVELLO CON UV FLIPPATE -->
+            <a-cylinder id="bg-cylinder" position="0 2.5 0" radius="8.4" height="5" open-ended="true" theta-start="-108" theta-length="216" rotation="0 180 0" material="src: #sfondo-img; side: double; transparent: true; opacity: 0.9; shader: flat" flip-uv-x></a-cylinder>
 
             <!-- STRUTTURA CENTRALE -->
             <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#FFFFFF"></a-box>
@@ -734,48 +770,48 @@
                 <a-entity id="menu-panel" position="0 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                    <!-- CONTROLLI RICOMPATTATI VERSO L'ALTO -->
-                    <a-text value="Speed" position="-1.5 2.2 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-speed-dec" class="clickable" position="-0.05 2.2 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <!-- CONTROLLI SPOSTATI PIÙ IN BASSO -->
+                    <a-text value="Speed" position="-1.5 1.4 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-dec" class="clickable" position="-0.05 1.4 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-speed-val" value="180 deg/s" position="0.6 2.2 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-speed-inc" class="clickable" position="1.35 2.2 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-speed-val" value="180 deg/s" position="0.6 1.4 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-inc" class="clickable" position="1.35 1.4 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text value="Wobbling" position="-1.5 1.5 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-wind-dec" class="clickable" position="-0.05 1.5 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="Wobbling" position="-1.5 0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-dec" class="clickable" position="-0.05 0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-wind-val" value="30" position="0.6 1.5 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-wind-inc" class="clickable" position="1.35 1.5 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-wind-val" value="30" position="0.6 0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-inc" class="clickable" position="1.35 0.7 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text value="Inertia" position="-1.5 0.8 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 0.8 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="Inertia" position="-1.5 0.0 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 0.0 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-inertia-val" value="80" position="0.6 0.8 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-inertia-inc" class="clickable" position="1.35 0.8 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-inertia-val" value="80" position="0.6 0.0 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-inc" class="clickable" position="1.35 0.0 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <a-text value="Level" position="-1.5 0.1 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-level-dec" class="clickable" position="-0.05 0.1 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="Level" position="-1.5 -0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-level-dec" class="clickable" position="-0.05 -0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
                         <a-text value="-" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
-                    <a-text id="menu-level-val" value="Lv 1" position="0.6 0.1 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-level-inc" class="clickable" position="1.35 0.1 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text id="menu-level-val" value="Lv 1" position="0.6 -0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-level-inc" class="clickable" position="1.35 -0.7 0.05" width="0.4" height="0.4" color="#388E3C">
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
-                    <!-- AREA RISERVATA IN BASSO: TIMER E CONTEGGIO CASSE/COMBINAZIONI -->
-                    <a-plane position="0 -1.2 0.02" width="3.2" height="1.6" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
-                    <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 -1.2 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
+                    <!-- AREA IN BASSO HUD PER CASSE E TIMER -->
+                    <a-plane position="0 -1.8 0.02" width="3.2" height="1.4" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
+                    <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
 
-                    <a-text id="menu-version-val" value="v25.7.0" position="0 -2.5 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v25.9.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 

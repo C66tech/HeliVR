@@ -116,7 +116,7 @@
             }
         });
 
-        // COMPONENTE PER TRASCINARE IL GRUPPO VERTIBIRD/PERNO SEPARATAMENTE RISPETTO AL DIORAMA
+        // COMPONENTE PER TRASCINARE L'INTERO SISTEMA VERTI (PERNO, VERTI, BASI E CASSE) SEPARATAMENTE
         AFRAME.registerComponent('verti-drag', {
             init: function () {
                 this.isDragging = false;
@@ -152,7 +152,7 @@
 
                     let dist = handPos.distanceTo(vertiPos);
 
-                    if (rightGrip > 0.5 && (dist < 0.6 || this.isDragging)) {
+                    if (rightGrip > 0.5 && (dist < 1.0 || this.isDragging)) {
                         vertiObj.updateMatrixWorld(true);
                         if (!this.isDragging) {
                             this.isDragging = true;
@@ -678,7 +678,12 @@
                     if (triggerPressed && !this.prevRightTrigger) {
                         if (this.attachedCrate) {
                             if (canDrop) {
-                                this.worldRoot.object3D.add(this.attachedCrate.object3D);
+                                let cratesContainer = document.querySelector('#crates-container');
+                                if (cratesContainer) {
+                                    cratesContainer.object3D.add(this.attachedCrate.object3D);
+                                } else {
+                                    this.worldRoot.object3D.add(this.attachedCrate.object3D);
+                                }
                                 this.attachedCrate.object3D.position.set(this.hookL.x, targetDropHeight, this.hookL.z); 
                                 this.attachedCrate.object3D.rotation.set(0, 0, 0);
                                 this.attachedCrate = null;
@@ -809,7 +814,7 @@
             <!-- DIORAMA 3D DINAMICO (CARICA scene1.glb, scene2.glb, ...) -->
             <a-gltf-model id="diorama-env" src="scene1.glb" make-vivid scale="25 25 25" position="0 -0.9 -3.5"></a-gltf-model>
 
-            <!-- GRUPPO PERNO E VERTIBIRD (TERZA ENTITÀ RIPOSIZIONABILE SEPARATAMENTE TRAMITE GRIP DESTRO) -->
+            <!-- SISTEMA VERTI COMPLETO (PERNO, VERTI, BASI E CASSE - RIPOSIZIONABILE SEPARATAMENTE VIA GRIP) -->
             <a-entity id="verti-pivot-group" position="0 0 0" verti-drag>
                 <!-- STRUTTURA CENTRALE -->
                 <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#E35815"></a-box>
@@ -847,58 +852,58 @@
                         </a-entity>
                     </a-entity>
                 </a-entity>
-            </a-entity>
 
-            <!-- PIATTAFORME DI ATTERRAGGIO -->
-            <a-entity id="drop-zone" position="6.48 0 0">
-                <a-cylinder position="0 0.25 0" radius="0.75" height="0.5" color="#1976D2"></a-cylinder>
-                <a-ring position="0 0.501 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFEB3B"></a-ring>
-                <a-text value="H" position="0 0.501 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
-            </a-entity>
-
-            <a-entity id="plat-high" position="0 0 6.48">
-                <a-cylinder position="0 0.40 0" radius="0.75" height="0.8" color="#9C27B0"></a-cylinder>
-                <a-ring position="0 0.801 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
-                <a-text value="H" position="0 0.801 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
-            </a-entity>
-
-            <a-entity id="plat-left" position="-6.48 0 0">
-                <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#FF9800"></a-cylinder>
-                <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
-                <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
-            </a-entity>
-
-            <a-entity id="plat-low" position="0 0 -6.48">
-                <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#4CAF50"></a-cylinder>
-                <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
-                <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
-            </a-entity>
-
-            <!-- LE 4 CASSE -->
-            <a-entity id="crates-container">
-                <a-entity class="cargo-crate" data-color="blue" position="0 -10 0">
-                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
-                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#1976D2" material="shader: flat"></a-plane>
-                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                <!-- PIATTAFORME DI ATTERRAGGIO -->
+                <a-entity id="drop-zone" position="6.48 0 0">
+                    <a-cylinder position="0 0.25 0" radius="0.75" height="0.5" color="#1976D2"></a-cylinder>
+                    <a-ring position="0 0.501 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFEB3B"></a-ring>
+                    <a-text value="H" position="0 0.501 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
                 </a-entity>
-                <a-entity class="cargo-crate" data-color="purple" position="0 -10 0">
-                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
-                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#9C27B0" material="shader: flat"></a-plane>
-                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+
+                <a-entity id="plat-high" position="0 0 6.48">
+                    <a-cylinder position="0 0.40 0" radius="0.75" height="0.8" color="#9C27B0"></a-cylinder>
+                    <a-ring position="0 0.801 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
+                    <a-text value="H" position="0 0.801 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
                 </a-entity>
-                <a-entity class="cargo-crate" data-color="orange" position="0 -10 0">
-                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
-                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#FF9800" material="shader: flat"></a-plane>
-                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+
+                <a-entity id="plat-left" position="-6.48 0 0">
+                    <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#FF9800"></a-cylinder>
+                    <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
+                    <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
                 </a-entity>
-                <a-entity class="cargo-crate" data-color="green" position="0 -10 0">
-                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
-                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#4CAF50" material="shader: flat"></a-plane>
-                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+
+                <a-entity id="plat-low" position="0 0 -6.48">
+                    <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#4CAF50"></a-cylinder>
+                    <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
+                    <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
+                </a-entity>
+
+                <!-- LE 4 CASSE -->
+                <a-entity id="crates-container">
+                    <a-entity class="cargo-crate" data-color="blue" position="0 -10 0">
+                        <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
+                        <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#1976D2" material="shader: flat"></a-plane>
+                        <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
+                        <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                    </a-entity>
+                    <a-entity class="cargo-crate" data-color="purple" position="0 -10 0">
+                        <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
+                        <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#9C27B0" material="shader: flat"></a-plane>
+                        <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
+                        <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                    </a-entity>
+                    <a-entity class="cargo-crate" data-color="orange" position="0 -10 0">
+                        <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
+                        <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#FF9800" material="shader: flat"></a-plane>
+                        <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
+                        <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                    </a-entity>
+                    <a-entity class="cargo-crate" data-color="green" position="0 -10 0">
+                        <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
+                        <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#4CAF50" material="shader: flat"></a-plane>
+                        <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
+                        <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                    </a-entity>
                 </a-entity>
             </a-entity>
 

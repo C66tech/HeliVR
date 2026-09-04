@@ -470,7 +470,7 @@
                     let canDrop = false;
                     let targetDropHeight = 0;
 
-                    // CONTROLLO SGANCIO CASSA (BLOCCO SU PIATTAFORMA GIÀ OCCUPATA)
+                    // CONTROLLO OCCUPAZIONE PIATTAFORMA
                     for (let plat of this.platforms) {
                         let distH = Math.hypot(this.hookL.x - plat.pos.x, this.hookL.z - plat.pos.z);
                         if (distH < plat.radius) {
@@ -758,8 +758,8 @@
                 </a-entity>
             </a-entity>
 
-            <!-- CONSOLLE SCHERMI CENTRATA -->
-            <a-entity id="central-dashboard" position="0 9.0 -2.0" rotation="20 0 0">
+            <!-- CONSOLLE MENU E HUD ACCORPATI: FISSATI NEL MONDO A ORE 9 DEL DIORAMA (X: -10.0, Z: 0.0) -->
+            <a-entity id="central-dashboard" position="-10.0 6.0 0.0" rotation="10 90 0">
                 <a-entity id="menu-panel" position="0 0 0" visible="true">
                     <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
@@ -799,22 +799,19 @@
                         <a-text value="+" align="center" width="8" color="#FFF"></a-text>
                     </a-plane>
 
+                    <!-- SEZIONE INTEGRATA DELL'HUD PER TIMER E CASSE NELLO STESSO PANNELLO -->
+                    <a-plane position="0 -1.8 0.02" width="3.2" height="1.4" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
+                    <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
+
                     <a-text id="menu-version-val" value="v25.16.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
                 </a-entity>
             </a-entity>
 
         </a-entity>
 
-        <!-- MAIN CAMERA (Esterna, vista diorama) CON HUD A SINISTRA -->
+        <!-- MAIN CAMERA (Esterna, vista diorama) -->
         <a-entity id="rig" position="0 0 0">
-            <a-camera id="main-camera" position="0 1.5 0" active="true">
-                <!-- HUD POSIZIONATO ALLA SINISTRA DEL GIOCATORE -->
-                <a-entity id="hud-left" position="-0.75 0.15 -1.0" rotation="0 15 0">
-                    <a-plane width="0.75" height="0.4" color="#111111" opacity="0.75" material="shader: flat">
-                        <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 0 0.01" align="center" width="2.2" color="#1976D2" font="mozillavr"></a-text>
-                    </a-plane>
-                </a-entity>
-            </a-camera>
+            <a-camera id="main-camera" position="0 1.5 0" active="true"></a-camera>
             <a-entity id="right-hand" oculus-touch-controls="hand: right" raycaster="objects: .clickable" laser-controls="hand: right"></a-entity>
             <a-entity id="left-hand" oculus-touch-controls="hand: left"></a-entity>
         </a-entity>

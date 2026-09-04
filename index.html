@@ -65,7 +65,6 @@
                 this.dragP = new THREE.Vector3();
                 this.dragQ = new THREE.Quaternion();
                 this.dragS = new THREE.Vector3();
-                this.dragEuler = new THREE.Euler();
                 this.initialControllerMatrixInv = new THREE.Matrix4();
                 this.initialHudMatrix = new THREE.Matrix4();
             },
@@ -85,7 +84,6 @@
                     let handObj = this.rightHandEl.object3D;
                     let hudObj = this.el.object3D;
 
-                    // Se siamo abbastanza vicini all'HUD col controller o lo stiamo già trascinando
                     handObj.updateMatrixWorld(true);
                     let handPos = new THREE.Vector3();
                     handObj.getWorldPosition(handPos);
@@ -109,6 +107,69 @@
                             targetMatrix.decompose(this.dragP, this.dragQ, this.dragS);
                             this.el.object3D.position.copy(this.dragP);
                             this.el.object3D.quaternion.copy(this.dragQ);
+                            this.el.object3D.updateMatrixWorld(true);
+                        }
+                    } else {
+                        this.isDragging = false;
+                    }
+                }
+            }
+        });
+
+        // COMPONENTE PER TRASCINARE IL GRUPPO VERTIBIRD/PERNO SEPARATAMENTE RISPETTO AL DIORAMA
+        AFRAME.registerComponent('verti-drag', {
+            init: function () {
+                this.isDragging = false;
+                this.rightHandEl = document.querySelector('#right-hand');
+                this.dragP = new THREE.Vector3();
+                this.dragQ = new THREE.Quaternion();
+                this.dragS = new THREE.Vector3();
+                this.initialControllerMatrixInv = new THREE.Matrix4();
+                this.initialVertiMatrix = new THREE.Matrix4();
+            },
+            tick: function () {
+                let rightGrip = 0;
+                let xrSession = this.el.sceneEl.renderer?.xr?.getSession();
+                if (xrSession && xrSession.inputSources) {
+                    for (let source of xrSession.inputSources) {
+                        if (source.handedness === 'right' && source.gamepad) {
+                            let gp = source.gamepad;
+                            rightGrip = gp.buttons[1] ? (gp.buttons[1].value || (gp.buttons[1].pressed ? 1 : 0)) : 0;
+                        }
+                    }
+                }
+
+                if (this.rightHandEl && this.rightHandEl.object3D) {
+                    let handObj = this.rightHandEl.object3D;
+                    let vertiObj = this.el.object3D;
+
+                    handObj.updateMatrixWorld(true);
+                    let handPos = new THREE.Vector3();
+                    handObj.getWorldPosition(handPos);
+
+                    let vertiPos = new THREE.Vector3();
+                    vertiObj.getWorldPosition(vertiPos);
+
+                    let dist = handPos.distanceTo(vertiPos);
+
+                    if (rightGrip > 0.5 && (dist < 0.6 || this.isDragging)) {
+                        vertiObj.updateMatrixWorld(true);
+                        if (!this.isDragging) {
+                            this.isDragging = true;
+                            this.initialControllerMatrixInv.copy(handObj.matrixWorld).invert();
+                            this.initialVertiMatrix.copy(vertiObj.matrixWorld);
+                        } else {
+                            let currentControllerMatrix = handObj.matrixWorld;
+                            let deltaMatrix = currentControllerMatrix.clone().multiply(this.initialControllerMatrixInv);
+                            let targetMatrix = deltaMatrix.clone().multiply(this.initialVertiMatrix);
+
+                            if (this.el.parentNode && this.el.parentNode.object3D) {
+                                let parentInv = this.el.parentNode.object3D.matrixWorld.clone().invert();
+                                targetMatrix.premultiply(parentInv);
+                            }
+
+                            targetMatrix.decompose(this.dragP, this.dragQ, this.dragS);
+                            this.el.object3D.position.copy(this.dragP);
                             this.el.object3D.updateMatrixWorld(true);
                         }
                     } else {
@@ -155,6 +216,7 @@
 
                 this.worldRoot = document.querySelector('#world-root');
                 this.hudDashboard = document.querySelector('#central-dashboard');
+                this.vertiGroup = document.querySelector('#verti-pivot-group');
                 this.mainCameraEl = document.querySelector('#main-camera');
                 this.cockpitCameraEl = document.querySelector('#cockpit-camera');
                 
@@ -322,7 +384,7 @@
                     }
                 };
 
-                // STEP DI SCALA ANCORA PIÙ FINI (0.0025)
+                // STEP DI SCALA FINI (0.0025)
                 this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.0025));
                 this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.0025));
 
@@ -390,11 +452,12 @@
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // TRASCINAMENTO DEL DIORAMA (se non si sta spostando l'HUD)
+                // TRASCINAMENTO DEL DIORAMA (se non si sta spostando l'HUD o il Vertibird)
                 let hudComp = this.hudDashboard ? this.hudDashboard.components['hud-drag'] : null;
-                let isHudBeingDragged = hudComp && hudComp.isDragging;
+                let vertiComp = this.vertiGroup ? this.vertiGroup.components['verti-drag'] : null;
+                let isOtherBeingDragged = (hudComp && hudComp.isDragging) || (vertiComp && vertiComp.isDragging);
 
-                if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D && !isHudBeingDragged) {
+                if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D && !isOtherBeingDragged) {
                     let handObj = this.rightHandEl.object3D;
                     if (rightGrip > 0.5 && !this.isCockpitActive) {
                         handObj.updateMatrixWorld(true);
@@ -746,10 +809,45 @@
             <!-- DIORAMA 3D DINAMICO (CARICA scene1.glb, scene2.glb, ...) -->
             <a-gltf-model id="diorama-env" src="scene1.glb" make-vivid scale="25 25 25" position="0 -0.9 -3.5"></a-gltf-model>
 
-            <!-- STRUTTURA CENTRALE -->
-            <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#E35815"></a-box>
-            <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; color: #E35815; repeat: 1 1"></a-plane>
-            <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
+            <!-- GRUPPO PERNO E VERTIBIRD (TERZA ENTITÀ RIPOSIZIONABILE SEPARATAMENTE TRAMITE GRIP DESTRO) -->
+            <a-entity id="verti-pivot-group" position="0 0 0" verti-drag>
+                <!-- STRUTTURA CENTRALE -->
+                <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#E35815"></a-box>
+                <!-- FRONTALINO BIANCO -->
+                <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; color: #FFFFFF; repeat: 1 1"></a-plane>
+                <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
+
+                <!-- VERTIBIRD -->
+                <a-entity id="vertibird" position="0 0.85 0" vertibird-flight>
+                    <a-box id="rod" position="3.24 0 0" width="6.48" height="0.02" depth="0.02" color="#808080"></a-box>
+                    
+                    <a-entity id="heli-wrapper" position="6.48 0 0">
+                        <a-entity id="heli-yaw" rotation="0 90 0">
+                            <a-entity id="heli-pitch" rotation="0 0 0">
+                                <a-gltf-model src="#verti-model" make-vivid position="-0.10 0.2 0" scale="2.415 2.415 2.415" rotation="0 180 0"></a-gltf-model>
+
+                                <a-entity position="-0.10 0.48 0">
+                                    <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #333"></a-cylinder>
+                                    <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
+                                    <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
+                                </a-entity>
+
+                                <!-- GANCIO -->
+                                <a-entity id="hook-area" position="0 0 0">
+                                    <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
+                                    <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
+                                </a-entity>
+
+                                <!-- CONTENITORE DELLA COCKPIT CAM -->
+                                <a-entity id="cockpit-rig" position="0.95 -1.4 -0.95" rotation="0 150 0">
+                                    <a-camera id="cockpit-camera" position="0 0 0" rotation="0 0 0" active="false" wasd-controls-enabled="false" look-controls="enabled: false"></a-camera>
+                                </a-entity>
+
+                            </a-entity>
+                        </a-entity>
+                    </a-entity>
+                </a-entity>
+            </a-entity>
 
             <!-- PIATTAFORME DI ATTERRAGGIO -->
             <a-entity id="drop-zone" position="6.48 0 0">
@@ -801,37 +899,6 @@
                     <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#4CAF50" material="shader: flat"></a-plane>
                     <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
                     <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
-                </a-entity>
-            </a-entity>
-
-            <!-- VERTIBIRD -->
-            <a-entity id="vertibird" position="0 0.85 0" vertibird-flight>
-                <a-box id="rod" position="3.24 0 0" width="6.48" height="0.02" depth="0.02" color="#808080"></a-box>
-                
-                <a-entity id="heli-wrapper" position="6.48 0 0">
-                    <a-entity id="heli-yaw" rotation="0 90 0">
-                        <a-entity id="heli-pitch" rotation="0 0 0">
-                            <a-gltf-model src="#verti-model" make-vivid position="-0.10 0.2 0" scale="2.415 2.415 2.415" rotation="0 180 0"></a-gltf-model>
-
-                            <a-entity position="-0.10 0.48 0">
-                                <a-cylinder position="0 0.08 0" radius="0.035" height="0.15" material="color: #333"></a-cylinder>
-                                <a-sphere position="0 0.16 0" radius="0.07" material="color: #FFCC00"></a-sphere>
-                                <a-box id="main-rotor" position="0 0.19 0" width="2.8" height="0.012" depth="0.1" color="#FFEB3B"></a-box>
-                            </a-entity>
-
-                            <!-- GANCIO -->
-                            <a-entity id="hook-area" position="0 0 0">
-                                <a-cylinder position="0 -0.121 0" radius="0.003" height="0.242" color="#222"></a-cylinder>
-                                <a-sphere id="hook-magnet" position="0 -0.242 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
-                            </a-entity>
-
-                            <!-- CONTENITORE DELLA COCKPIT CAM -->
-                            <a-entity id="cockpit-rig" position="0.95 -1.4 -0.95" rotation="0 150 0">
-                                <a-camera id="cockpit-camera" position="0 0 0" rotation="0 0 0" active="false" wasd-controls-enabled="false" look-controls="enabled: false"></a-camera>
-                            </a-entity>
-
-                        </a-entity>
-                    </a-entity>
                 </a-entity>
             </a-entity>
 

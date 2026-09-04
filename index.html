@@ -57,6 +57,67 @@
             }
         });
 
+        // COMPONENTE PER TRASCINARE LO HUD SEPARATAMENTE TRAMITE GRIP DESTRO
+        AFRAME.registerComponent('hud-drag', {
+            init: function () {
+                this.isDragging = false;
+                this.rightHandEl = document.querySelector('#right-hand');
+                this.dragP = new THREE.Vector3();
+                this.dragQ = new THREE.Quaternion();
+                this.dragS = new THREE.Vector3();
+                this.dragEuler = new THREE.Euler();
+                this.initialControllerMatrixInv = new THREE.Matrix4();
+                this.initialHudMatrix = new THREE.Matrix4();
+            },
+            tick: function () {
+                let rightGrip = 0;
+                let xrSession = this.el.sceneEl.renderer?.xr?.getSession();
+                if (xrSession && xrSession.inputSources) {
+                    for (let source of xrSession.inputSources) {
+                        if (source.handedness === 'right' && source.gamepad) {
+                            let gp = source.gamepad;
+                            rightGrip = gp.buttons[1] ? (gp.buttons[1].value || (gp.buttons[1].pressed ? 1 : 0)) : 0;
+                        }
+                    }
+                }
+
+                if (this.rightHandEl && this.rightHandEl.object3D) {
+                    let handObj = this.rightHandEl.object3D;
+                    let hudObj = this.el.object3D;
+
+                    // Se siamo abbastanza vicini all'HUD col controller o lo stiamo già trascinando
+                    handObj.updateMatrixWorld(true);
+                    let handPos = new THREE.Vector3();
+                    handObj.getWorldPosition(handPos);
+
+                    let hudPos = new THREE.Vector3();
+                    hudObj.getWorldPosition(hudPos);
+
+                    let dist = handPos.distanceTo(hudPos);
+
+                    if (rightGrip > 0.5 && (dist < 1.2 || this.isDragging)) {
+                        hudObj.updateMatrixWorld(true);
+                        if (!this.isDragging) {
+                            this.isDragging = true;
+                            this.initialControllerMatrixInv.copy(handObj.matrixWorld).invert();
+                            this.initialHudMatrix.copy(hudObj.matrixWorld);
+                        } else {
+                            let currentControllerMatrix = handObj.matrixWorld;
+                            let deltaMatrix = currentControllerMatrix.clone().multiply(this.initialControllerMatrixInv);
+                            let targetMatrix = deltaMatrix.clone().multiply(this.initialHudMatrix);
+
+                            targetMatrix.decompose(this.dragP, this.dragQ, this.dragS);
+                            this.el.object3D.position.copy(this.dragP);
+                            this.el.object3D.quaternion.copy(this.dragQ);
+                            this.el.object3D.updateMatrixWorld(true);
+                        }
+                    } else {
+                        this.isDragging = false;
+                    }
+                }
+            }
+        });
+
         // LOGICA DI VOLO E FISICA (WHIRLYBIRD VR)
         AFRAME.registerComponent('vertibird-flight', {
             init: function () {
@@ -93,6 +154,7 @@
                 this.currentWindVol = 0;
 
                 this.worldRoot = document.querySelector('#world-root');
+                this.hudDashboard = document.querySelector('#central-dashboard');
                 this.mainCameraEl = document.querySelector('#main-camera');
                 this.cockpitCameraEl = document.querySelector('#cockpit-camera');
                 
@@ -253,16 +315,16 @@
 
                 const applyScale = (delta) => {
                     if (this.isCockpitActive) return; 
-                    this.currentScale = Math.min(3.0, Math.max(0.02, this.currentScale + delta));
+                    this.currentScale = Math.min(3.0, Math.max(0.005, this.currentScale + delta));
                     if (this.worldRoot && this.worldRoot.object3D) {
                         this.worldRoot.object3D.scale.set(this.currentScale, this.currentScale, this.currentScale);
                         this.worldRoot.object3D.updateMatrixWorld(true);
                     }
                 };
 
-                // STEP DI SCALA PIÙ FINI (0.01 anziché 0.04)
-                this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.01));
-                this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.01));
+                // STEP DI SCALA ANCORA PIÙ FINI (0.0025)
+                this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.0025));
+                this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.0025));
 
                 // CAMBIO DINAMICO DEL DIORAMA IN BASE AL LIVELLO (sceneK.glb)
                 this.updateDioramaForLevel = () => {
@@ -328,7 +390,11 @@
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D) {
+                // TRASCINAMENTO DEL DIORAMA (se non si sta spostando l'HUD)
+                let hudComp = this.hudDashboard ? this.hudDashboard.components['hud-drag'] : null;
+                let isHudBeingDragged = hudComp && hudComp.isDragging;
+
+                if (this.rightHandEl && this.rightHandEl.object3D && this.worldRoot && this.worldRoot.object3D && !isHudBeingDragged) {
                     let handObj = this.rightHandEl.object3D;
                     if (rightGrip > 0.5 && !this.isCockpitActive) {
                         handObj.updateMatrixWorld(true);
@@ -674,7 +740,7 @@
         <a-light type="ambient" color="#FFF" intensity="1.2"></a-light>
         <a-light type="directional" color="#FFF" intensity="1.0" position="-1 3 1"></a-light>
 
-        <!-- DIORAMA E MONDO DI GIOCO -->
+        <!-- DIORAMA E MONDO DI GIOCO (PRIMA ENTITÀ RIPOSIZIONABILE TRAMITE GRIP DESTRO) -->
         <a-entity id="world-root" position="0 0.8 -0.8" rotation="0 0 0" scale="0.06 0.06 0.06">
             
             <!-- DIORAMA 3D DINAMICO (CARICA scene1.glb, scene2.glb, ...) -->
@@ -769,55 +835,55 @@
                 </a-entity>
             </a-entity>
 
-            <!-- CONSOLLE MENU E HUD ACCORPATI: DENTRO IL DIORAMA A ORE 9 -->
-            <a-entity id="central-dashboard" position="-10.0 6.0 0.0" rotation="10 90 0">
-                <a-entity id="menu-panel" position="0 0 0" visible="true">
-                    <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
+        </a-entity>
 
-                    <a-text value="Speed" position="-1.5 1.4 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-speed-dec" class="clickable" position="-0.05 1.4 0.05" width="0.4" height="0.4" color="#D32F2F">
-                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-                    <a-text id="menu-speed-val" value="180 deg/s" position="0.6 1.4 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-speed-inc" class="clickable" position="1.35 1.4 0.05" width="0.4" height="0.4" color="#388E3C">
-                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
+        <!-- CONSOLLE MENU E HUD (SECONDA ENTITÀ RIPOSIZIONABILE SEPARATAMENTE TRAMITE GRIP DESTRO) -->
+        <a-entity id="central-dashboard" position="-1.2 1.2 -0.8" rotation="0 35 0" scale="0.25 0.25 0.25" hud-drag>
+            <a-entity id="menu-panel" position="0 0 0" visible="true">
+                <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-                    <a-text value="Wobbling" position="-1.5 0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-wind-dec" class="clickable" position="-0.05 0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
-                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-                    <a-text id="menu-wind-val" value="30" position="0.6 0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-wind-inc" class="clickable" position="1.35 0.7 0.05" width="0.4" height="0.4" color="#388E3C">
-                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
+                <a-text value="Speed" position="-1.5 1.4 0.05" align="left" width="5.5" color="#000000"></a-text>
+                <a-plane id="btn-speed-dec" class="clickable" position="-0.05 1.4 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
+                <a-text id="menu-speed-val" value="180 deg/s" position="0.6 1.4 0.05" align="center" width="4.5" color="#000000"></a-text>
+                <a-plane id="btn-speed-inc" class="clickable" position="1.35 1.4 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
 
-                    <a-text value="Inertia" position="-1.5 0.0 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 0.0 0.05" width="0.4" height="0.4" color="#D32F2F">
-                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-                    <a-text id="menu-inertia-val" value="80" position="0.6 0.0 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-inertia-inc" class="clickable" position="1.35 0.0 0.05" width="0.4" height="0.4" color="#388E3C">
-                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
+                <a-text value="Wobbling" position="-1.5 0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
+                <a-plane id="btn-wind-dec" class="clickable" position="-0.05 0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
+                <a-text id="menu-wind-val" value="30" position="0.6 0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                <a-plane id="btn-wind-inc" class="clickable" position="1.35 0.7 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
 
-                    <a-text value="Level" position="-1.5 -0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
-                    <a-plane id="btn-level-dec" class="clickable" position="-0.05 -0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
-                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
-                    <a-text id="menu-level-val" value="Lv 1" position="0.6 -0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
-                    <a-plane id="btn-level-inc" class="clickable" position="1.35 -0.7 0.05" width="0.4" height="0.4" color="#388E3C">
-                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                    </a-plane>
+                <a-text value="Inertia" position="-1.5 0.0 0.05" align="left" width="5.5" color="#000000"></a-text>
+                <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 0.0 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
+                <a-text id="menu-inertia-val" value="80" position="0.6 0.0 0.05" align="center" width="4.5" color="#000000"></a-text>
+                <a-plane id="btn-inertia-inc" class="clickable" position="1.35 0.0 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
 
-                    <!-- AREA HUD INTEGRATA PER STATO E TEMPO -->
-                    <a-plane position="0 -1.8 0.02" width="3.2" height="1.4" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
-                    <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
+                <a-text value="Level" position="-1.5 -0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
+                <a-plane id="btn-level-dec" class="clickable" position="-0.05 -0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
+                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
+                <a-text id="menu-level-val" value="Lv 1" position="0.6 -0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                <a-plane id="btn-level-inc" class="clickable" position="1.35 -0.7 0.05" width="0.4" height="0.4" color="#388E3C">
+                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                </a-plane>
 
-                    <a-text id="menu-version-val" value="v25.16.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
-                </a-entity>
+                <!-- AREA HUD INTEGRATA PER STATO E TEMPO -->
+                <a-plane position="0 -1.8 0.02" width="3.2" height="1.4" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
+                <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
+
+                <a-text id="menu-version-val" value="v25.16.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
-
         </a-entity>
 
         <!-- MAIN CAMERA (Esterna, vista diorama) -->

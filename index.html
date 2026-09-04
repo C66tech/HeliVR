@@ -260,8 +260,9 @@
                     }
                 };
 
-                this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.04));
-                this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.04));
+                // STEP DI SCALA PIÙ FINI (0.01 anziché 0.04)
+                this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.01));
+                this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.01));
 
                 // CAMBIO DINAMICO DEL DIORAMA IN BASE AL LIVELLO (sceneK.glb)
                 this.updateDioramaForLevel = () => {
@@ -680,8 +681,8 @@
             <a-gltf-model id="diorama-env" src="scene1.glb" make-vivid scale="25 25 25" position="0 -0.9 -3.5"></a-gltf-model>
 
             <!-- STRUTTURA CENTRALE -->
-            <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#FFFFFF"></a-box>
-            <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; repeat: 1 1"></a-plane>
+            <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#E35815"></a-box>
+            <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; color: #E35815; repeat: 1 1"></a-plane>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
             <!-- PIATTAFORME DI ATTERRAGGIO -->
@@ -768,55 +769,55 @@
                 </a-entity>
             </a-entity>
 
-        </a-entity>
+            <!-- CONSOLLE MENU E HUD ACCORPATI: DENTRO IL DIORAMA A ORE 9 -->
+            <a-entity id="central-dashboard" position="-10.0 6.0 0.0" rotation="10 90 0">
+                <a-entity id="menu-panel" position="0 0 0" visible="true">
+                    <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
 
-        <!-- CONSOLLE MENU E HUD FISSI NEL MONDO VR A ORE 9 (ESTERNI AL DIORAMA, NON SI RIDIMENSIONANO) -->
-        <a-entity id="central-dashboard" position="-2.5 1.5 -1.2" rotation="0 45 0" scale="0.35 0.35 0.35">
-            <a-entity id="menu-panel" position="0 0 0" visible="true">
-                <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
+                    <a-text value="Speed" position="-1.5 1.4 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-dec" class="clickable" position="-0.05 1.4 0.05" width="0.4" height="0.4" color="#D32F2F">
+                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-speed-val" value="180 deg/s" position="0.6 1.4 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-speed-inc" class="clickable" position="1.35 1.4 0.05" width="0.4" height="0.4" color="#388E3C">
+                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
 
-                <a-text value="Speed" position="-1.5 1.4 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-speed-dec" class="clickable" position="-0.05 1.4 0.05" width="0.4" height="0.4" color="#D32F2F">
-                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
-                <a-text id="menu-speed-val" value="180 deg/s" position="0.6 1.4 0.05" align="center" width="4.5" color="#000000"></a-text>
-                <a-plane id="btn-speed-inc" class="clickable" position="1.35 1.4 0.05" width="0.4" height="0.4" color="#388E3C">
-                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
+                    <a-text value="Wobbling" position="-1.5 0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-dec" class="clickable" position="-0.05 0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
+                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-wind-val" value="30" position="0.6 0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-wind-inc" class="clickable" position="1.35 0.7 0.05" width="0.4" height="0.4" color="#388E3C">
+                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
 
-                <a-text value="Wobbling" position="-1.5 0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-wind-dec" class="clickable" position="-0.05 0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
-                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
-                <a-text id="menu-wind-val" value="30" position="0.6 0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
-                <a-plane id="btn-wind-inc" class="clickable" position="1.35 0.7 0.05" width="0.4" height="0.4" color="#388E3C">
-                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
+                    <a-text value="Inertia" position="-1.5 0.0 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 0.0 0.05" width="0.4" height="0.4" color="#D32F2F">
+                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-inertia-val" value="80" position="0.6 0.0 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-inertia-inc" class="clickable" position="1.35 0.0 0.05" width="0.4" height="0.4" color="#388E3C">
+                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
 
-                <a-text value="Inertia" position="-1.5 0.0 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-inertia-dec" class="clickable" position="-0.05 0.0 0.05" width="0.4" height="0.4" color="#D32F2F">
-                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
-                <a-text id="menu-inertia-val" value="80" position="0.6 0.0 0.05" align="center" width="4.5" color="#000000"></a-text>
-                <a-plane id="btn-inertia-inc" class="clickable" position="1.35 0.0 0.05" width="0.4" height="0.4" color="#388E3C">
-                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
+                    <a-text value="Level" position="-1.5 -0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
+                    <a-plane id="btn-level-dec" class="clickable" position="-0.05 -0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
+                        <a-text value="-" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
+                    <a-text id="menu-level-val" value="Lv 1" position="0.6 -0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
+                    <a-plane id="btn-level-inc" class="clickable" position="1.35 -0.7 0.05" width="0.4" height="0.4" color="#388E3C">
+                        <a-text value="+" align="center" width="8" color="#FFF"></a-text>
+                    </a-plane>
 
-                <a-text value="Level" position="-1.5 -0.7 0.05" align="left" width="5.5" color="#000000"></a-text>
-                <a-plane id="btn-level-dec" class="clickable" position="-0.05 -0.7 0.05" width="0.4" height="0.4" color="#D32F2F">
-                    <a-text value="-" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
-                <a-text id="menu-level-val" value="Lv 1" position="0.6 -0.7 0.05" align="center" width="4.5" color="#000000"></a-text>
-                <a-plane id="btn-level-inc" class="clickable" position="1.35 -0.7 0.05" width="0.4" height="0.4" color="#388E3C">
-                    <a-text value="+" align="center" width="8" color="#FFF"></a-text>
-                </a-plane>
+                    <!-- AREA HUD INTEGRATA PER STATO E TEMPO -->
+                    <a-plane position="0 -1.8 0.02" width="3.2" height="1.4" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
+                    <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
 
-                <!-- AREA HUD INTEGRATA PER STATO E TEMPO -->
-                <a-plane position="0 -1.8 0.02" width="3.2" height="1.4" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
-                <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
-
-                <a-text id="menu-version-val" value="v25.16.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                    <a-text id="menu-version-val" value="v25.16.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
+                </a-entity>
             </a-entity>
+
         </a-entity>
 
         <!-- MAIN CAMERA (Esterna, vista diorama) -->

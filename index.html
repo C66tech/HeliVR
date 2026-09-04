@@ -193,7 +193,7 @@
                 this.isAttached = false;
                 this.attachedCrate = null;
                 this.prevRightTrigger = false;
-                this.prevCanGrab = false;
+                this.prevIsYellow = false;
 
                 let allCrates = Array.from(document.querySelectorAll('.cargo-crate'));
                 let shuffledPads = [...this.platforms].sort(() => 0.5 - Math.random());
@@ -254,6 +254,8 @@
                 this.windOsc = null;
                 this.windFilter = null;
                 this.windGain = null;
+                this.yellowOsc = null;
+                this.yellowGain = null;
                 this.audioInitialized = false;
 
                 this.initAudio = () => {
@@ -265,6 +267,7 @@
                         window.AudioContext = window.AudioContext || window.webkitAudioContext;
                         this.audioCtx = new AudioContext();
                         
+                        // MOTORE VERTIBIRD
                         this.oscillator = this.audioCtx.createOscillator();
                         this.oscillator.type = 'sawtooth';
                         this.oscillator.frequency.value = 30;
@@ -276,6 +279,7 @@
                         this.gainNode.connect(this.audioCtx.destination);
                         this.oscillator.start();
 
+                        // EFFETTO VENTO
                         this.windOsc = this.audioCtx.createOscillator();
                         this.windOsc.type = 'sawtooth'; 
                         this.windOsc.frequency.value = 250;
@@ -293,29 +297,24 @@
                         this.windGain.connect(this.audioCtx.destination);
                         this.windOsc.start();
                         
+                        // BEEP CONTINUO PER MAGNETI GIALLI
+                        this.yellowOsc = this.audioCtx.createOscillator();
+                        this.yellowOsc.type = 'sine';
+                        this.yellowOsc.frequency.value = 880;
+
+                        this.yellowGain = this.audioCtx.createGain();
+                        this.yellowGain.gain.value = 0.0;
+
+                        this.yellowOsc.connect(this.yellowGain);
+                        this.yellowGain.connect(this.audioCtx.destination);
+                        this.yellowOsc.start();
+
                         this.audioInitialized = true;
                     } catch (e) {}
                 };
 
-                // FUNZIONE PER ESEGUIRE UN BEEP AUDIO BREVE
-                this.playBeep = (freq = 880, duration = 0.1) => {
-                    if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
-                    try {
-                        let osc = this.audioCtx.createOscillator();
-                        let gain = this.audioCtx.createGain();
-                        osc.type = 'sine';
-                        osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
-                        gain.gain.setValueAtTime(0.2, this.audioCtx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + duration);
-                        osc.connect(gain);
-                        gain.connect(this.audioCtx.destination);
-                        osc.start();
-                        osc.stop(this.audioCtx.currentTime + duration);
-                    } catch(e) {}
-                };
-
-                // FUNZIONE PER ATTIVARE IL FEEDBACK TATTILE (VIBRAZIONE CONTROLLER)
-                this.triggerHaptics = (intensity = 0.7, duration = 100) => {
+                // ATTIVAZIONE VIBRAZIONE SU CONTROLLER VR
+                this.triggerHaptics = (intensity = 0.7, duration = 150) => {
                     let xrSession = this.el.sceneEl.renderer?.xr?.getSession();
                     if (xrSession && xrSession.inputSources) {
                         for (let source of xrSession.inputSources) {
@@ -417,7 +416,7 @@
                     }
                 }
 
-                if (leftTrigger > 0.02) this.initAudio();
+                if (leftTrigger > 0.02 || rightTrigger > 0.02 || rightGrip > 0.02) this.initAudio();
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
@@ -573,14 +572,6 @@
                     
                     let maxAllowedDist = 0.045; 
                     let canGrab = !this.attachedCrate && closestCrate && (minDist < maxAllowedDist); 
-                    
-                    // RILEVAMENTO CONDIZIONE DI AGGANCIO: BEEP AUDIO E VIBRAZIONE CONTROLLER
-                    if (canGrab && !this.prevCanGrab) {
-                        this.playBeep(880, 0.1); 
-                        this.triggerHaptics(0.7, 100); 
-                    }
-                    this.prevCanGrab = canGrab;
-
                     let canDrop = false;
                     let targetDropHeight = 0;
 
@@ -616,6 +607,9 @@
                         }
                     });
 
+                    // CONDIZIONE MAGNETI GIALLI
+                    let isYellow = (this.attachedCrate && canDrop) || (!this.attachedCrate && canGrab);
+
                     if (this.attachedCrate) {
                         if (canDrop) {
                             this.hookMagnet.setAttribute('color', '#FFFF00'); 
@@ -646,6 +640,21 @@
                             activeObjMagnet.setAttribute('color', '#4CAF50');
                             activeObjMagnet.setAttribute('material', 'emissive', '#4CAF50');
                         }
+                    }
+
+                    // VIBRAZIONE ALL'INGRESSO NELLO STATO GIALLO
+                    if (isYellow && !this.prevIsYellow) {
+                        this.triggerHaptics(0.7, 150);
+                    }
+                    this.prevIsYellow = isYellow;
+
+                    // AUDIO BEEP CONTINUO MENTRE È GIALLO
+                    if (this.audioInitialized && this.audioCtx && this.yellowGain) {
+                        if (this.audioCtx.state === 'suspended') {
+                            this.audioCtx.resume();
+                        }
+                        let targetYellowVol = isYellow ? 0.25 : 0.0;
+                        this.yellowGain.gain.setTargetAtTime(targetYellowVol, this.audioCtx.currentTime, 0.02);
                     }
 
                     let triggerPressed = rightTrigger > 0.5;
@@ -783,9 +792,9 @@
             <!-- DIORAMA 3D DINAMICO -->
             <a-gltf-model id="diorama-env" src="scene1.glb" make-vivid scale="13.5 13.5 13.5" position="0 -0.5 -1.2"></a-gltf-model>
 
-            <!-- STRUTTURA CENTRALE -->
-            <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#E35815"></a-box>
-            <a-plane position="0 0.3 0.901" width="1.8" height="0.6" material="src: #frontalino-img; shader: flat; color: #FFFFFF; repeat: 1 1"></a-plane>
+            <!-- STRUTTURA CENTRALE (TRONCO DI PIRAMIDE) -->
+            <a-cone position="0 0.3 0" radius-bottom="1.27" radius-top="0.92" height="0.6" segments-radial="4" rotation="0 45 0" color="#E35815"></a-cone>
+            <a-plane position="0 0.3 0.78" rotation="-22.62 0 0" width="1.62" height="0.54" material="src: #frontalino-img; shader: flat; color: #FFFFFF; repeat: 1 1"></a-plane>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
             <!-- PIATTAFORME DI ATTERRAGGIO -->

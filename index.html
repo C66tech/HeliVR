@@ -85,7 +85,6 @@
                     let handObj = this.rightHandEl.object3D;
                     let hudObj = this.el.object3D;
 
-                    // Se siamo abbastanza vicini all'HUD col controller o lo stiamo già trascinando
                     handObj.updateMatrixWorld(true);
                     let handPos = new THREE.Vector3();
                     handObj.getWorldPosition(handPos);
@@ -194,6 +193,7 @@
                 this.isAttached = false;
                 this.attachedCrate = null;
                 this.prevRightTrigger = false;
+                this.prevCanGrab = false;
 
                 let allCrates = Array.from(document.querySelectorAll('.cargo-crate'));
                 let shuffledPads = [...this.platforms].sort(() => 0.5 - Math.random());
@@ -297,6 +297,39 @@
                     } catch (e) {}
                 };
 
+                // FUNZIONE PER ESEGUIRE UN BEEP AUDIO BREVE
+                this.playBeep = (freq = 880, duration = 0.1) => {
+                    if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+                    try {
+                        let osc = this.audioCtx.createOscillator();
+                        let gain = this.audioCtx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
+                        gain.gain.setValueAtTime(0.2, this.audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + duration);
+                        osc.connect(gain);
+                        gain.connect(this.audioCtx.destination);
+                        osc.start();
+                        osc.stop(this.audioCtx.currentTime + duration);
+                    } catch(e) {}
+                };
+
+                // FUNZIONE PER ATTIVARE IL FEEDBACK TATTILE (VIBRAZIONE CONTROLLER)
+                this.triggerHaptics = (intensity = 0.7, duration = 100) => {
+                    let xrSession = this.el.sceneEl.renderer?.xr?.getSession();
+                    if (xrSession && xrSession.inputSources) {
+                        for (let source of xrSession.inputSources) {
+                            if (source.gamepad) {
+                                if (source.gamepad.hapticActuators && source.gamepad.hapticActuators.length > 0) {
+                                    source.gamepad.hapticActuators[0].pulse(intensity, duration);
+                                } else if (source.gamepad.vibrationActuator && source.gamepad.vibrationActuator.pulse) {
+                                    source.gamepad.vibrationActuator.pulse({ duration: duration, strongMagnitude: intensity, weakMagnitude: intensity });
+                                }
+                            }
+                        }
+                    }
+                };
+
                 window.addEventListener('click', this.initAudio);
                 window.addEventListener('touchstart', this.initAudio);
 
@@ -322,11 +355,9 @@
                     }
                 };
 
-                // STEP DI SCALA ANCORA PIÙ FINI (0.0025)
                 this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.0025));
                 this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.0025));
 
-                // CAMBIO DINAMICO DEL DIORAMA IN BASE AL LIVELLO (sceneK.glb)
                 this.updateDioramaForLevel = () => {
                     let dioramaEl = document.querySelector('#diorama-env');
                     if (dioramaEl) {
@@ -390,7 +421,6 @@
                 if (Math.abs(rightStickY) < 0.15) rightStickY = 0;
                 if (leftTrigger < 0.02) leftTrigger = 0;
 
-                // TRASCINAMENTO DEL DIORAMA (se non si sta spostando l'HUD)
                 let hudComp = this.hudDashboard ? this.hudDashboard.components['hud-drag'] : null;
                 let isHudBeingDragged = hudComp && hudComp.isDragging;
 
@@ -543,10 +573,17 @@
                     
                     let maxAllowedDist = 0.045; 
                     let canGrab = !this.attachedCrate && closestCrate && (minDist < maxAllowedDist); 
+                    
+                    // RILEVAMENTO CONDIZIONE DI AGGANCIO: BEEP AUDIO E VIBRAZIONE CONTROLLER
+                    if (canGrab && !this.prevCanGrab) {
+                        this.playBeep(880, 0.1); 
+                        this.triggerHaptics(0.7, 100); 
+                    }
+                    this.prevCanGrab = canGrab;
+
                     let canDrop = false;
                     let targetDropHeight = 0;
 
-                    // CONTROLLO OCCUPAZIONE PIATTAFORMA
                     for (let plat of this.platforms) {
                         let distH = Math.hypot(this.hookL.x - plat.pos.x, this.hookL.z - plat.pos.z);
                         if (distH < plat.radius) {
@@ -740,10 +777,10 @@
         <a-light type="ambient" color="#FFF" intensity="1.2"></a-light>
         <a-light type="directional" color="#FFF" intensity="1.0" position="-1 3 1"></a-light>
 
-        <!-- DIORAMA E MONDO DI GIOCO (PRIMA ENTITÀ RIPOSIZIONABILE TRAMITE GRIP DESTRO) -->
+        <!-- DIORAMA E MONDO DI GIOCO -->
         <a-entity id="world-root" position="0 0.9 -0.9" rotation="0 0 0" scale="0.06 0.06 0.06">
             
-            <!-- DIORAMA 3D DINAMICO (CARICA scene1.glb, scene2.glb, ...) -->
+            <!-- DIORAMA 3D DINAMICO -->
             <a-gltf-model id="diorama-env" src="scene1.glb" make-vivid scale="13.5 13.5 13.5" position="0 -0.5 -1.2"></a-gltf-model>
 
             <!-- STRUTTURA CENTRALE -->
@@ -837,7 +874,7 @@
 
         </a-entity>
 
-        <!-- CONSOLLE MENU E HUD (SECONDA ENTITÀ RIPOSIZIONABILE SEPARATAMENTE TRAMITE GRIP DESTRO) -->
+        <!-- CONSOLLE MENU E HUD -->
         <a-entity id="central-dashboard" position="-1.2 1.2 -0.8" rotation="0 35 0" scale="0.25 0.25 0.25" hud-drag>
             <a-entity id="menu-panel" position="0 0 0" visible="true">
                 <a-plane width="3.6" height="6.4" material="shader: flat; src: #menu-bg"></a-plane>
@@ -886,7 +923,7 @@
             </a-entity>
         </a-entity>
 
-        <!-- MAIN CAMERA (Esterna, vista diorama) -->
+        <!-- MAIN CAMERA -->
         <a-entity id="rig" position="0 0 0">
             <a-camera id="main-camera" position="0 1.5 0" active="true"></a-camera>
             <a-entity id="right-hand" oculus-touch-controls="hand: right" raycaster="objects: .clickable" laser-controls="hand: right"></a-entity>

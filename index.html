@@ -741,10 +741,10 @@
         <a-light type="directional" color="#FFF" intensity="1.0" position="-1 3 1"></a-light>
 
         <!-- DIORAMA E MONDO DI GIOCO (PRIMA ENTITÀ RIPOSIZIONABILE TRAMITE GRIP DESTRO) -->
-        <a-entity id="world-root" position="0 0.9 0" rotation="0 0 0" scale="0.06 0.06 0.06">
+        <a-entity id="world-root" position="0 0.9 -0.9" rotation="0 0 0" scale="0.06 0.06 0.06">
             
             <!-- DIORAMA 3D DINAMICO (CARICA scene1.glb, scene2.glb, ...) -->
-            <a-gltf-model id="diorama-env" src="scene1.glb" make-vivid scale="14 14 14" position="0 0 -0.5"></a-gltf-model>
+            <a-gltf-model id="diorama-env" src="scene1.glb" make-vivid scale="14 14 14" position="0 -0.2-0.9"></a-gltf-model>
 
             <!-- STRUTTURA CENTRALE -->
             <a-box position="0 0.3 0" width="1.8" height="0.6" depth="1.8" color="#E35815"></a-box>

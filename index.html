@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -280,7 +280,7 @@
                     } catch (e) {}
                 };
 
-                // FUNZIONE BEEP SINGOLO CON DURATA DEFINITA (400 MS)
+                // BEEP SINGOLO CON DURATA DI 400 MS
                 this.playBeep = (freq = 880, duration = 0.4) => {
                     if (!this.audioCtx) return;
                     if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
@@ -627,7 +627,7 @@
                         }
                     }
 
-                    // VIBRAZIONE E BEEP DI DURATA 400 MS ALL'ATTIVAZIONE DELLO STATO GIALLO
+                    // VIBRAZIONE E BEEP DI 400 MS ALL'ATTIVAZIONE DELLO STATO GIALLO
                     if (isYellow && !this.prevIsYellow) {
                         this.triggerHaptics(0.7, 400);
                         this.playBeep(880, 0.4);
@@ -711,10 +711,10 @@
                     let timeStr = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}.${ms}`;
                     
                     if (this.matchedCrates === 3 && !this.timerRunning && this.timerStarted) {
-                        this.statusTextEl.setAttribute('value', `VITTORIA!\nTempo: ${timeStr}`);
+                        this.statusTextEl.setAttribute('value', `VICTORY!\nTime: ${timeStr}`);
                         this.statusTextEl.setAttribute('color', '#388E3C');
                     } else {
-                        this.statusTextEl.setAttribute('value', `Casse: ${this.matchedCrates}/3\nTempo: ${timeStr}`);
+                        this.statusTextEl.setAttribute('value', `Crates: ${this.matchedCrates}/3\nTime: ${timeStr}`);
                         this.statusTextEl.setAttribute('color', '#1976D2');
                     }
                 }
@@ -769,9 +769,12 @@
             <!-- DIORAMA 3D DINAMICO -->
             <a-gltf-model id="diorama-env" src="scene1.glb" scale="13.5 13.5 13.5" position="0 -0.5 -1.2"></a-gltf-model>
 
-            <!-- STRUTTURA CENTRALE (TRONCO DI PIRAMIDE INGRANDITO DEL 20%) -->
+            <!-- STRUTTURA CENTRALE (TRONCO DI PIRAMIDE) -->
             <a-cone position="0 0.3 0" radius-bottom="1.524" radius-top="1.104" height="0.6" segments-radial="4" rotation="0 45 0" color="#E35815"></a-cone>
-            <a-plane position="0 0.3 0.936" rotation="-22.62 0 0" width="1.944" height="0.54" material="src: #frontalino-img; shader: flat; color: #FFFFFF; repeat: 1 1"></a-plane>
+            
+            <!-- FRONTALINO CENTRATO SULLA FACCIA ANTERIORE E CON TEXTURE STRETCHATA -->
+            <a-plane position="0 0.3 0.932" rotation="-26.33 0 0" width="1.80" height="0.52" material="src: #frontalino-img; shader: flat; repeat: 1 1"></a-plane>
+            
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
             <!-- PIATTAFORME DI ATTERRAGGIO -->
@@ -903,7 +906,7 @@
 
                 <!-- AREA HUD INTEGRATA PER STATO E TEMPO -->
                 <a-plane position="0 -1.8 0.02" width="3.2" height="1.4" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
-                <a-text id="game-status-text" value="Casse: 0/3&#10;Tempo: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
+                <a-text id="game-status-text" value="Crates: 0/3&#10;Time: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
 
                 <a-text id="menu-version-val" value="v25.16.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>

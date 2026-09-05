@@ -9,25 +9,6 @@
     <title>Whirlybird VR - V25.16.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // COMPONENTE COLORI VIVIDI E DOPPIO LATO (DOUBLESIDE)
-        AFRAME.registerComponent('make-vivid', {
-            init: function () {
-                this.el.addEventListener('model-loaded', () => {
-                    const mesh = this.el.getObject3D('mesh');
-                    if (mesh) {
-                        mesh.traverse((node) => {
-                            if (node.isMesh && node.material) {
-                                node.material.roughness = 0.35;
-                                node.material.metalness = 0.0;
-                                node.material.side = THREE.DoubleSide;
-                                node.material.needsUpdate = true;
-                            }
-                        });
-                    }
-                });
-            }
-        });
-
         // COMPONENTE PER FLIPPARE UV ORIZZONTALMENTE SULLE MESH
         AFRAME.registerComponent('flip-uv-x', {
             init: function () {
@@ -254,8 +235,6 @@
                 this.windOsc = null;
                 this.windFilter = null;
                 this.windGain = null;
-                this.yellowOsc = null;
-                this.yellowGain = null;
                 this.audioInitialized = false;
 
                 this.initAudio = () => {
@@ -296,25 +275,31 @@
                         this.windFilter.connect(this.windGain);
                         this.windGain.connect(this.audioCtx.destination);
                         this.windOsc.start();
-                        
-                        // BEEP CONTINUO PER MAGNETI GIALLI
-                        this.yellowOsc = this.audioCtx.createOscillator();
-                        this.yellowOsc.type = 'sine';
-                        this.yellowOsc.frequency.value = 880;
-
-                        this.yellowGain = this.audioCtx.createGain();
-                        this.yellowGain.gain.value = 0.0;
-
-                        this.yellowOsc.connect(this.yellowGain);
-                        this.yellowGain.connect(this.audioCtx.destination);
-                        this.yellowOsc.start();
 
                         this.audioInitialized = true;
                     } catch (e) {}
                 };
 
-                // ATTIVAZIONE VIBRAZIONE SU CONTROLLER VR
-                this.triggerHaptics = (intensity = 0.7, duration = 150) => {
+                // FUNZIONE BEEP SINGOLO CON DURATA DEFINITA (400 MS)
+                this.playBeep = (freq = 880, duration = 0.4) => {
+                    if (!this.audioCtx) return;
+                    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+                    try {
+                        let osc = this.audioCtx.createOscillator();
+                        let gain = this.audioCtx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
+                        gain.gain.setValueAtTime(0.25, this.audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + duration);
+                        osc.connect(gain);
+                        gain.connect(this.audioCtx.destination);
+                        osc.start();
+                        osc.stop(this.audioCtx.currentTime + duration);
+                    } catch(e) {}
+                };
+
+                // ATTIVAZIONE VIBRAZIONE SU CONTROLLER VR (400 MS)
+                this.triggerHaptics = (intensity = 0.7, duration = 400) => {
                     let xrSession = this.el.sceneEl.renderer?.xr?.getSession();
                     if (xrSession && xrSession.inputSources) {
                         for (let source of xrSession.inputSources) {
@@ -642,20 +627,12 @@
                         }
                     }
 
-                    // VIBRAZIONE ALL'INGRESSO NELLO STATO GIALLO
+                    // VIBRAZIONE E BEEP DI DURATA 400 MS ALL'ATTIVAZIONE DELLO STATO GIALLO
                     if (isYellow && !this.prevIsYellow) {
-                        this.triggerHaptics(0.7, 150);
+                        this.triggerHaptics(0.7, 400);
+                        this.playBeep(880, 0.4);
                     }
                     this.prevIsYellow = isYellow;
-
-                    // AUDIO BEEP CONTINUO MENTRE È GIALLO
-                    if (this.audioInitialized && this.audioCtx && this.yellowGain) {
-                        if (this.audioCtx.state === 'suspended') {
-                            this.audioCtx.resume();
-                        }
-                        let targetYellowVol = isYellow ? 0.25 : 0.0;
-                        this.yellowGain.gain.setTargetAtTime(targetYellowVol, this.audioCtx.currentTime, 0.02);
-                    }
 
                     let triggerPressed = rightTrigger > 0.5;
                     if (triggerPressed && !this.prevRightTrigger) {
@@ -792,9 +769,9 @@
             <!-- DIORAMA 3D DINAMICO -->
             <a-gltf-model id="diorama-env" src="scene1.glb" scale="13.5 13.5 13.5" position="0 -0.5 -1.2"></a-gltf-model>
 
-            <!-- STRUTTURA CENTRALE (TRONCO DI PIRAMIDE) -->
-            <a-cone position="0 0.3 0" radius-bottom="1.27" radius-top="0.92" height="0.6" segments-radial="4" rotation="0 45 0" color="#E35815"></a-cone>
-            <a-plane position="0 0.3 0.78" rotation="-22.62 0 0" width="1.62" height="0.54" material="src: #frontalino-img; shader: flat; color: #FFFFFF; repeat: 1 1"></a-plane>
+            <!-- STRUTTURA CENTRALE (TRONCO DI PIRAMIDE INGRANDITO DEL 20%) -->
+            <a-cone position="0 0.3 0" radius-bottom="1.524" radius-top="1.104" height="0.6" segments-radial="4" rotation="0 45 0" color="#E35815"></a-cone>
+            <a-plane position="0 0.3 0.936" rotation="-22.62 0 0" width="1.944" height="0.54" material="src: #frontalino-img; shader: flat; color: #FFFFFF; repeat: 1 1"></a-plane>
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
             <!-- PIATTAFORME DI ATTERRAGGIO -->

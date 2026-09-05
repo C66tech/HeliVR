@@ -9,6 +9,15 @@
     <title>Whirlybird VR - V25.16.0</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
+        // DEFINIZIONE COLORI E ALTEZZE PIATTAFORME
+        const COLOR_DEFS = [
+            { name: 'blue', hex: '#1976D2', height: 0.5 },
+            { name: 'purple', hex: '#9C27B0', height: 0.8 },
+            { name: 'orange', hex: '#FF9800', height: 0.3 },
+            { name: 'green', hex: '#4CAF50', height: 0.4 },
+            { name: 'red', hex: '#E53935', height: 0.6 }
+        ];
+
         // COMPONENTE PER FLIPPARE UV ORIZZONTALMENTE SULLE MESH
         AFRAME.registerComponent('flip-uv-x', {
             init: function () {
@@ -156,62 +165,10 @@
                 this.initialControllerMatrixInv = new THREE.Matrix4();
                 this.initialWorldMatrix = new THREE.Matrix4();
 
-                this.platforms = [
-                    { el: document.querySelector('#drop-zone'), height: 0.5, radius: 0.75, color: 'blue', dir: {x: 1, z: 0} },  
-                    { el: document.querySelector('#plat-high'), height: 0.8, radius: 0.75, color: 'purple', dir: {x: 0, z: 1} },   
-                    { el: document.querySelector('#plat-left'), height: 0.3, radius: 0.75, color: 'orange', dir: {x: -1, z: 0} },   
-                    { el: document.querySelector('#plat-low'), height: 0.3, radius: 0.75, color: 'green', dir: {x: 0, z: -1} }     
-                ];
-
-                this.platforms.forEach(plat => {
-                    let hHover = plat.height + 0.762;
-                    let dY = hHover - 0.85; 
-                    let trueR = Math.sqrt((this.radius * this.radius) - (dY * dY));
-                    plat.pos = { x: trueR * plat.dir.x, z: trueR * plat.dir.z };
-                    plat.el.setAttribute('position', `${plat.pos.x} 0 ${plat.pos.z}`);
-                });
-                
                 this.isAttached = false;
                 this.attachedCrate = null;
                 this.prevRightTrigger = false;
                 this.prevIsYellow = false;
-
-                let allCrates = Array.from(document.querySelectorAll('.cargo-crate'));
-                let shuffledPads = [...this.platforms].sort(() => 0.5 - Math.random());
-                let selectedPads = shuffledPads.slice(0, 3);
-                let validSetup = false;
-                let selectedCrates = [];
-                
-                while(!validSetup) {
-                    let tempCrates = [...allCrates].sort(() => 0.5 - Math.random());
-                    selectedCrates = tempCrates.slice(0, 3);
-                    validSetup = true;
-                    for(let i=0; i<3; i++) {
-                        if(selectedCrates[i].dataset.color === selectedPads[i].color) {
-                            validSetup = false;
-                            break;
-                        }
-                    }
-                }
-
-                for(let i=0; i<3; i++) {
-                    let crate = selectedCrates[i];
-                    let pad = selectedPads[i];
-                    crate.object3D.position.set(pad.pos.x, pad.height, pad.pos.z); 
-                    crate.setAttribute('visible', 'true');
-                }
-                
-                let unusedCrate = allCrates.find(c => !selectedCrates.includes(c));
-                if(unusedCrate) {
-                    unusedCrate.setAttribute('visible', 'false');
-                    unusedCrate.object3D.position.set(0, -10, 0);
-                }
-
-                this.startPad = this.platforms.find(p => !selectedPads.includes(p));
-                this.finalLandingPad = this.platforms.find(p => p.color === unusedCrate.dataset.color);
-
-                this.angle = Math.atan2(-this.startPad.dir.z, this.startPad.dir.x) * (180 / Math.PI);
-                this.heliY = this.startPad.height + 0.25;
 
                 this.statusTextEl = document.querySelector('#game-status-text');
                 this.timerStarted = false;
@@ -342,6 +299,159 @@
                 this.rightHandEl.addEventListener('abuttondown', () => applyScale(-0.0025));
                 this.rightHandEl.addEventListener('bbuttondown', () => applyScale(0.0025));
 
+                // CONFIGURAZIONE DINAMICA LIVELLO
+                this.setupLevel = (level) => {
+                    let numPlatforms = level + 2;
+                    let numCrates = level + 1;
+
+                    if (this.attachedCrate) {
+                        this.worldRoot.object3D.add(this.attachedCrate.object3D);
+                        this.attachedCrate = null;
+                    }
+
+                    const platContainer = document.querySelector('#platforms-container');
+                    const cratesContainer = document.querySelector('#crates-container');
+                    platContainer.innerHTML = '';
+                    cratesContainer.innerHTML = '';
+
+                    this.platforms = [];
+                    for (let i = 0; i < numPlatforms; i++) {
+                        let pDef = COLOR_DEFS[i];
+                        let angle = (i * 2 * Math.PI) / numPlatforms;
+                        let dir = { x: Math.cos(angle), z: Math.sin(angle) };
+
+                        let platEl = document.createElement('a-entity');
+                        platEl.setAttribute('id', `plat-${i}`);
+
+                        let cyl = document.createElement('a-cylinder');
+                        cyl.setAttribute('position', `0 ${pDef.height / 2} 0`);
+                        cyl.setAttribute('radius', '0.75');
+                        cyl.setAttribute('height', pDef.height);
+                        cyl.setAttribute('color', pDef.hex);
+                        platEl.appendChild(cyl);
+
+                        let ring = document.createElement('a-ring');
+                        ring.setAttribute('position', `0 ${pDef.height + 0.001} 0`);
+                        ring.setAttribute('rotation', '-90 0 0');
+                        ring.setAttribute('radius-inner', '0.6');
+                        ring.setAttribute('radius-outer', '0.72');
+                        ring.setAttribute('color', '#FFFFFF');
+                        platEl.appendChild(ring);
+
+                        let text = document.createElement('a-text');
+                        text.setAttribute('value', 'H');
+                        text.setAttribute('position', `0 ${pDef.height + 0.001} 0`);
+                        text.setAttribute('rotation', '-90 0 0');
+                        text.setAttribute('align', 'center');
+                        text.setAttribute('width', '5');
+                        text.setAttribute('color', '#FFF');
+                        text.setAttribute('font', 'mozillavr');
+                        platEl.appendChild(text);
+
+                        platContainer.appendChild(platEl);
+
+                        let hHover = pDef.height + 0.762;
+                        let dY = hHover - 0.85;
+                        let trueR = Math.sqrt((this.radius * this.radius) - (dY * dY));
+                        let pos = { x: trueR * dir.x, z: trueR * dir.z };
+                        platEl.setAttribute('position', `${pos.x} 0 ${pos.z}`);
+
+                        this.platforms.push({
+                            el: platEl,
+                            height: pDef.height,
+                            radius: 0.75,
+                            color: pDef.name,
+                            hex: pDef.hex,
+                            dir: dir,
+                            pos: pos
+                        });
+                    }
+
+                    let availableCrateDefs = COLOR_DEFS.slice(0, numPlatforms);
+                    let shuffledPads = [...this.platforms].sort(() => 0.5 - Math.random());
+                    let selectedPads = shuffledPads.slice(0, numCrates);
+
+                    let validSetup = false;
+                    let selectedCrateDefs = [];
+
+                    while (!validSetup) {
+                        let tempCrateDefs = [...availableCrateDefs].sort(() => 0.5 - Math.random()).slice(0, numCrates);
+                        validSetup = true;
+                        for (let i = 0; i < numCrates; i++) {
+                            if (tempCrateDefs[i].name === selectedPads[i].color) {
+                                validSetup = false;
+                                break;
+                            }
+                        }
+                        if (validSetup) {
+                            selectedCrateDefs = tempCrateDefs;
+                        }
+                    }
+
+                    this.startPad = this.platforms.find(p => !selectedPads.includes(p));
+                    let unusedColorDef = availableCrateDefs.find(c => !selectedCrateDefs.includes(c));
+                    this.finalLandingPad = this.platforms.find(p => p.color === unusedColorDef.name);
+
+                    for (let i = 0; i < numCrates; i++) {
+                        let cDef = selectedCrateDefs[i];
+                        let pad = selectedPads[i];
+
+                        let crateEl = document.createElement('a-entity');
+                        crateEl.setAttribute('class', 'cargo-crate');
+                        crateEl.setAttribute('data-color', cDef.name);
+
+                        let box = document.createElement('a-box');
+                        box.setAttribute('position', '0 0.2 0');
+                        box.setAttribute('width', '0.4');
+                        box.setAttribute('height', '0.4');
+                        box.setAttribute('depth', '0.4');
+                        box.setAttribute('material', 'src: #cassa-img');
+                        box.setAttribute('texture-fallback', '');
+                        crateEl.appendChild(box);
+
+                        let topPlane = document.createElement('a-plane');
+                        topPlane.setAttribute('position', '0 0.401 0');
+                        topPlane.setAttribute('rotation', '-90 0 0');
+                        topPlane.setAttribute('width', '0.4');
+                        topPlane.setAttribute('height', '0.4');
+                        topPlane.setAttribute('color', cDef.hex);
+                        topPlane.setAttribute('material', 'shader: flat');
+                        crateEl.appendChild(topPlane);
+
+                        let cyl = document.createElement('a-cylinder');
+                        cyl.setAttribute('position', '0 0.45 0');
+                        cyl.setAttribute('radius', '0.01');
+                        cyl.setAttribute('height', '0.1');
+                        cyl.setAttribute('color', '#333');
+                        crateEl.appendChild(cyl);
+
+                        let magnet = document.createElement('a-sphere');
+                        magnet.setAttribute('class', 'object-magnet');
+                        magnet.setAttribute('position', '0 0.52 0');
+                        magnet.setAttribute('radius', '0.046');
+                        magnet.setAttribute('color', '#4CAF50');
+                        magnet.setAttribute('material', 'emissive: #4CAF50');
+                        crateEl.appendChild(magnet);
+
+                        cratesContainer.appendChild(crateEl);
+                        crateEl.object3D.position.set(pad.pos.x, pad.height, pad.pos.z);
+                        crateEl.setAttribute('visible', 'true');
+                    }
+
+                    this.angle = Math.atan2(-this.startPad.dir.z, this.startPad.dir.x) * (180 / Math.PI);
+                    this.heliY = this.startPad.height + 0.25;
+
+                    this.timerStarted = false;
+                    this.timerRunning = false;
+                    this.elapsedTime = 0;
+                    this.matchedCrates = 0;
+
+                    if (this.statusTextEl) {
+                        this.statusTextEl.setAttribute('value', `Crates: 0/${numCrates}\nTime: 00:00.0`);
+                        this.statusTextEl.setAttribute('color', '#1976D2');
+                    }
+                };
+
                 this.updateDioramaForLevel = () => {
                     let dioramaEl = document.querySelector('#diorama-env');
                     if (dioramaEl) {
@@ -372,9 +482,21 @@
                 if (btnWindInc) btnWindInc.addEventListener('click', () => { this.wobbleAmplitude = Math.min(150, this.wobbleAmplitude + 10); this.updateMenuUI(); });
                 if (btnInertiaDec) btnInertiaDec.addEventListener('click', () => { this.inertiaValue = Math.max(0, this.inertiaValue - 10); this.updateMenuUI(); });
                 if (btnInertiaInc) btnInertiaInc.addEventListener('click', () => { this.inertiaValue = Math.min(100, this.inertiaValue + 10); this.updateMenuUI(); });
-                if (btnLevelDec) btnLevelDec.addEventListener('click', () => { this.gameLevel = Math.max(1, this.gameLevel - 1); this.updateMenuUI(); this.updateDioramaForLevel(); });
-                if (btnLevelInc) btnLevelInc.addEventListener('click', () => { this.gameLevel = Math.min(10, this.gameLevel + 1); this.updateMenuUI(); this.updateDioramaForLevel(); });
+                
+                if (btnLevelDec) btnLevelDec.addEventListener('click', () => { 
+                    this.gameLevel = Math.max(1, this.gameLevel - 1); 
+                    this.setupLevel(this.gameLevel); 
+                    this.updateMenuUI(); 
+                    this.updateDioramaForLevel(); 
+                });
+                if (btnLevelInc) btnLevelInc.addEventListener('click', () => { 
+                    this.gameLevel = Math.min(3, this.gameLevel + 1); 
+                    this.setupLevel(this.gameLevel); 
+                    this.updateMenuUI(); 
+                    this.updateDioramaForLevel(); 
+                });
 
+                this.setupLevel(this.gameLevel);
                 this.updateMenuUI();
                 this.updateDioramaForLevel();
             },
@@ -458,7 +580,7 @@
                 let wobbleThrottleOffset = 0;
                 let wobbleStickOffset = 0;
 
-                if (!this.timerStarted && rightTrigger > 0.10) {
+                if (!this.timerStarted && (rightTrigger > 0.10 || leftTrigger > 0.10)) {
                     this.timerStarted = true;
                     this.timerRunning = true;
                 }
@@ -592,7 +714,6 @@
                         }
                     });
 
-                    // CONDIZIONE MAGNETI GIALLI
                     let isYellow = (this.attachedCrate && canDrop) || (!this.attachedCrate && canGrab);
 
                     if (this.attachedCrate) {
@@ -627,7 +748,6 @@
                         }
                     }
 
-                    // VIBRAZIONE E BEEP DI 400 MS ALL'ATTIVAZIONE DELLO STATO GIALLO
                     if (isYellow && !this.prevIsYellow) {
                         this.triggerHaptics(0.7, 400);
                         this.playBeep(880, 0.4);
@@ -678,6 +798,7 @@
                 }
 
                 let matched = 0;
+                let numCrates = this.gameLevel + 1;
                 allCrates.forEach(crate => {
                     if (crate.getAttribute('visible') === 'false' || crate.getAttribute('visible') === false) return;
                     if (crate === this.attachedCrate) return;
@@ -697,7 +818,7 @@
                 });
                 this.matchedCrates = matched;
 
-                if (this.matchedCrates === 3 && this.timerRunning && !isAirborne) {
+                if (this.matchedCrates === numCrates && this.timerRunning && !isAirborne) {
                     let distToTarget = Math.hypot(this.heliL.x - this.finalLandingPad.pos.x, this.heliL.z - this.finalLandingPad.pos.z);
                     if (distToTarget < this.finalLandingPad.radius) {
                         this.timerRunning = false;
@@ -710,11 +831,11 @@
                     let ms = Math.floor((this.elapsedTime % 1) * 10);
                     let timeStr = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}.${ms}`;
                     
-                    if (this.matchedCrates === 3 && !this.timerRunning && this.timerStarted) {
-                        this.statusTextEl.setAttribute('value', `VICTORY!\nTime: ${timeStr}`);
+                    if (this.matchedCrates === numCrates && !this.timerRunning && this.timerStarted) {
+                        this.statusTextEl.setAttribute('value', `Mission accomplished!\nTime: ${timeStr}`);
                         this.statusTextEl.setAttribute('color', '#388E3C');
                     } else {
-                        this.statusTextEl.setAttribute('value', `Crates: ${this.matchedCrates}/3\nTime: ${timeStr}`);
+                        this.statusTextEl.setAttribute('value', `Crates: ${this.matchedCrates}/${numCrates}\nTime: ${timeStr}`);
                         this.statusTextEl.setAttribute('color', '#1976D2');
                     }
                 }
@@ -767,68 +888,21 @@
         <a-entity id="world-root" position="0 0.9 -0.9" rotation="0 0 0" scale="0.06 0.06 0.06">
             
             <!-- DIORAMA 3D DINAMICO -->
-            <a-gltf-model id="diorama-env" src="scene1.glb" scale="13.5 13.5 13.5" position="0 -0.5 -1.2"></a-gltf-model>
+            <a-gltf-model id="diorama-env" src="scene1.glb" scale="13 13 13" position="0 -0.5 -1.2"></a-gltf-model>
 
             <!-- STRUTTURA CENTRALE (TRONCO DI PIRAMIDE) -->
             <a-cone position="0 0.3 0" radius-bottom="1.524" radius-top="1.104" height="0.6" segments-radial="4" rotation="0 45 0" color="#E35815"></a-cone>
             
-            <!-- FRONTALINO CENTRATO SULLA FACCIA ANTERIORE E CON TEXTURE STRETCHATA -->
+            <!-- FRONTALINO CENTRATO SULLA FACCIA ANTERIORE -->
             <a-plane position="0 0.3 0.932" rotation="-26.33 0 0" width="1.80" height="0.52" material="src: #frontalino-img; shader: flat; repeat: 1 1"></a-plane>
             
             <a-sphere position="0 0.6 0" radius="0.675" color="#FFCC00"></a-sphere>
 
-            <!-- PIATTAFORME DI ATTERRAGGIO -->
-            <a-entity id="drop-zone" position="6.48 0 0">
-                <a-cylinder position="0 0.25 0" radius="0.75" height="0.5" color="#1976D2"></a-cylinder>
-                <a-ring position="0 0.501 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFEB3B"></a-ring>
-                <a-text value="H" position="0 0.501 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
-            </a-entity>
+            <!-- CONTENITORE DINAMICO PIATTAFORME -->
+            <a-entity id="platforms-container"></a-entity>
 
-            <a-entity id="plat-high" position="0 0 6.48">
-                <a-cylinder position="0 0.40 0" radius="0.75" height="0.8" color="#9C27B0"></a-cylinder>
-                <a-ring position="0 0.801 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
-                <a-text value="H" position="0 0.801 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
-            </a-entity>
-
-            <a-entity id="plat-left" position="-6.48 0 0">
-                <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#FF9800"></a-cylinder>
-                <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
-                <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
-            </a-entity>
-
-            <a-entity id="plat-low" position="0 0 -6.48">
-                <a-cylinder position="0 0.15 0" radius="0.75" height="0.3" color="#4CAF50"></a-cylinder>
-                <a-ring position="0 0.301 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.72" color="#FFFFFF"></a-ring>
-                <a-text value="H" position="0 0.301 0" rotation="-90 0 0" align="center" width="5" color="#FFF" font="mozillavr"></a-text>
-            </a-entity>
-
-            <!-- LE 4 CASSE -->
-            <a-entity id="crates-container">
-                <a-entity class="cargo-crate" data-color="blue" position="0 -10 0">
-                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
-                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#1976D2" material="shader: flat"></a-plane>
-                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
-                </a-entity>
-                <a-entity class="cargo-crate" data-color="purple" position="0 -10 0">
-                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
-                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#9C27B0" material="shader: flat"></a-plane>
-                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
-                </a-entity>
-                <a-entity class="cargo-crate" data-color="orange" position="0 -10 0">
-                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
-                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#FF9800" material="shader: flat"></a-plane>
-                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
-                </a-entity>
-                <a-entity class="cargo-crate" data-color="green" position="0 -10 0">
-                    <a-box position="0 0.2 0" width="0.4" height="0.4" depth="0.4" material="src: #cassa-img" texture-fallback></a-box>
-                    <a-plane position="0 0.401 0" rotation="-90 0 0" width="0.4" height="0.4" color="#4CAF50" material="shader: flat"></a-plane>
-                    <a-cylinder position="0 0.45 0" radius="0.01" height="0.1" color="#333"></a-cylinder>
-                    <a-sphere class="object-magnet" position="0 0.52 0" radius="0.046" color="#4CAF50" material="emissive: #4CAF50"></a-sphere>
-                </a-entity>
-            </a-entity>
+            <!-- CONTENITORE DINAMICO CASSE -->
+            <a-entity id="crates-container"></a-entity>
 
             <!-- VERTIBIRD -->
             <a-entity id="vertibird" position="0 0.85 0" vertibird-flight>
@@ -906,7 +980,7 @@
 
                 <!-- AREA HUD INTEGRATA PER STATO E TEMPO -->
                 <a-plane position="0 -1.8 0.02" width="3.2" height="1.4" color="#FFFFFF" opacity="0.85" material="shader: flat"></a-plane>
-                <a-text id="game-status-text" value="Crates: 0/3&#10;Time: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
+                <a-text id="game-status-text" value="Crates: 0/2&#10;Time: 00:00.0" position="0 -1.8 0.05" align="center" width="6.5" color="#1976D2" font="mozillavr"></a-text>
 
                 <a-text id="menu-version-val" value="v25.16.0" position="0 -2.8 0.05" align="center" width="3.2" color="#000000"></a-text>
             </a-entity>
